@@ -1,9 +1,9 @@
 import inspect
+import sys
 import jump
 from jump import print_frame
 
-global frame, last_is
-
+import program_subordinate
 
 def level1():
     print('>level 1')
@@ -27,30 +27,16 @@ def level3():
     while f:
         last_is.append(f.f_lasti)
         f = f.f_back
+    program_subordinate.step2_1(1)
     print('stack at level3')
     print_frame(inspect.currentframe())
     print('<level 3')
 
-def level3_again():
-    func = 'level3_again'
-    global frame, last_is
-
-    print('frame before lasti fixup', last_is)
-    print_frame(frame)
-    jump.fixup_lasti(frame, last_is)
-    jump.jump(frame)
-    print('stack after jump')
-    print_frame(inspect.currentframe())
-
 def main():
     func = 'main'
+    jump.trace_funcalls([__file__, program_subordinate.__file__])
     level1()
-    level3_again()
     print('end of main')
 
-def mainmain():
-    func = 'mainmain'
-    main()
-    print_frame(inspect.currentframe())
-
-mainmain()
+main()
+print(jump.funcall_log)
