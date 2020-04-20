@@ -1,7 +1,9 @@
 import inspect
 import sys
-import jump
-from jump import print_frame
+import funcall_tracer
+from funcall_tracer import print_frame
+
+import program_subordinate
 
 
 def level1():
@@ -36,10 +38,10 @@ def level3():
 
 def main():
     func = "main"
-    jump.trace_funcalls([__file__, program_subordinate.__file__])
+    funcall_tracer.trace_funcalls([__file__, program_subordinate.__file__])
     level1()
     print("end of main")
 
 
 main()
-print(jump.funcall_log)
+print(funcall_tracer.funcall_log)
