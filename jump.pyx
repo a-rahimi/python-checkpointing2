@@ -3,13 +3,6 @@ import hashlib
 funcall_log = {}
 modules = []
 
-def fixup_lasti(frame, last_is):
-    cdef PyFrameObject *f = <PyFrameObject *> frame
-    i = 0
-    while f:
-        f.f_lasti = last_is[i]
-        f = f.f_back
-        i += 1
 
 def print_frame(frame):
     cdef PyFrameObject *f = <PyFrameObject *> frame
@@ -28,6 +21,7 @@ cdef hash_code(f_code):
   h = hashlib.sha1(f_code.co_code)
   h.update(str(f_code.co_consts).encode("utf-8"))
   return h.digest()
+
 
 cdef PyObject* _log_funcall_entry(PyFrameObject *frame, int exc):
   frame_obj = <object> frame
@@ -53,12 +47,16 @@ cdef PyObject* _log_funcall_entry(PyFrameObject *frame, int exc):
 
   return _PyEval_EvalFrameDefault(frame, exc)
 
+
 def trace_funcalls(module_fnames):
     cdef PyThreadState *state = PyThreadState_Get()
     modules.clear()
     modules.extend(module_fnames)
     state.interp.eval_frame = _log_funcall_entry
+
     
 def stop_trace_funcalls():
     cdef PyThreadState *state = PyThreadState_Get()
     state.interp.eval_frame = _PyEval_EvalFrameDefault
+
+
