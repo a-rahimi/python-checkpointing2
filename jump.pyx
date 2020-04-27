@@ -36,7 +36,7 @@ cdef PyObject* pyeval_fast_forward(PyFrameObject *frame, int exc):
         frame.f_lasti = jump_stack[jump_stack_idx].f_lasti
         frame.f_locals = <PyObject*>jump_stack[jump_stack_idx].f_locals
         for i, o in enumerate(jump_stack[jump_stack_idx].stack_content):
-            frame.f_localsplus[i] = <PyObject*> o
+            frame.f_valuestack[i] = <PyObject*> o
         jump_stack_idx -= 1
 
     print 'evaluating', frame_obj
@@ -81,15 +81,6 @@ cdef hash_code(f_code):
   return h.digest()
 
 
-cdef PyObject **current_stack_pointer():
-    g = dummy_generator.generator()
-    vs = next(g)
-    print 'Generator valuestack', <unsigned long>((<PyGenObject*>g).gi_frame.f_valuestack)
-    print 'Generator stacktop', <unsigned long>((<PyGenObject*>g).gi_frame.f_stacktop)
-
-    return (<PyGenObject*>g).gi_frame.f_stacktop
-
-
 cdef PyObject* pyeval_log_funcall_entry(PyFrameObject *frame, int exc):
   frame_obj = <object> frame
   cdef PyThreadState *state = PyThreadState_Get()
@@ -105,17 +96,10 @@ cdef PyObject* pyeval_log_funcall_entry(PyFrameObject *frame, int exc):
   print "---------Tracing-----"
   print frame_obj.f_code.co_filename, frame_obj.f_code.co_name
 
-  cdef PyObject **stack_pointer = current_stack_pointer()
-  num_objects_on_stack = stack_pointer - frame.f_valuestack
-  print 'objects on stack:', <unsigned int>stack_pointer, <unsigned int>frame.f_valuestack, num_objects_on_stack
-
   # keep a fully qualified name for the function. and a sha1 of its code.
   # if we hold references to the frame object, we might cause a lot of
   # unexpected garbage to be kept around.
-  funcall_log[(frame_obj.f_code.co_filename, frame_obj.f_code.co_name)] = (
-          hash_code(frame_obj.f_code),
-          num_objects_on_stack,
-          )
+  funcall_log[(frame_obj.f_code.co_filename, frame_obj.f_code.co_name)] = hash_code(frame_obj.f_code)
 
   return _PyEval_EvalFrameDefault(frame, exc)
 
