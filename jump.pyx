@@ -1,5 +1,6 @@
 import hashlib
 import collections
+import dummy_generator
 
 Frame = collections.namedtuple('Frame',
         ('f_code', 'f_lasti', 'f_locals', 'stack_content', ))
@@ -23,11 +24,11 @@ def save_jump():
             ))
         frame = frame.f_back
     return fake_stack
-    
+
 
 cdef PyObject* pyeval_fast_forward(PyFrameObject *frame, int exc):
     global jump_stack_idx
-    frame_obj = <object> frame 
+    frame_obj = <object> frame
     if frame_obj.f_code == jump_stack[jump_stack_idx].f_code:
         print 'jumping', frame_obj, 'to', jump_stack[-1].f_lasti
 
@@ -80,6 +81,15 @@ cdef hash_code(f_code):
   return h.digest()
 
 
+cdef PyObject **current_stack_pointer():
+    g = dummy_generator.generator()
+    vs = next(g)
+    print 'Generator valuestack', <unsigned long>((<PyGenObject*>g).gi_frame.f_valuestack)
+    print 'Generator stacktop', <unsigned long>((<PyGenObject*>g).gi_frame.f_stacktop)
+
+    return (<PyGenObject*>g).gi_frame.f_stacktop
+
+
 cdef PyObject* pyeval_log_funcall_entry(PyFrameObject *frame, int exc):
   frame_obj = <object> frame
   cdef PyThreadState *state = PyThreadState_Get()
@@ -92,15 +102,20 @@ cdef PyObject* pyeval_log_funcall_entry(PyFrameObject *frame, int exc):
       state.interp.eval_frame = pyeval_log_funcall_entry
       return r
 
-  print("---------Tracing-----")
-  print(frame_obj.f_code.co_filename, frame_obj.f_code.co_name)
+  print "---------Tracing-----"
+  print frame_obj.f_code.co_filename, frame_obj.f_code.co_name
+
+  cdef PyObject **stack_pointer = current_stack_pointer()
+  num_objects_on_stack = stack_pointer - frame.f_valuestack
+  print 'objects on stack:', <unsigned int>stack_pointer, <unsigned int>frame.f_valuestack, num_objects_on_stack
 
   # keep a fully qualified name for the function. and a sha1 of its code.
   # if we hold references to the frame object, we might cause a lot of
   # unexpected garbage to be kept around.
-  funcall_log[(frame_obj.f_code.co_filename, frame_obj.f_code.co_name)] = hash_code(
-      frame_obj.f_code
-  )
+  funcall_log[(frame_obj.f_code.co_filename, frame_obj.f_code.co_name)] = (
+          hash_code(frame_obj.f_code),
+          num_objects_on_stack,
+          )
 
   return _PyEval_EvalFrameDefault(frame, exc)
 
@@ -111,7 +126,7 @@ def trace_funcalls(module_fnames):
     modules.extend(module_fnames)
     state.interp.eval_frame = pyeval_log_funcall_entry
 
-    
+
 def stop_trace_funcalls():
     cdef PyThreadState *state = PyThreadState_Get()
     state.interp.eval_frame = _PyEval_EvalFrameDefault
