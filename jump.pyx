@@ -1,62 +1,31 @@
 import hashlib
 import collections
-import dummy_generator
 
 Frame = collections.namedtuple('Frame',
-        ('f_code', 'f_lasti', 'f_locals', 'stack_content', ))
-
-jump_stack = []
-jump_stack_idx = -1
+        ('f_lasti', 'stack_content', ))
 
 
-def save_jump():
-    cdef PyFrameObject *frame = PyEval_GetFrame()
-    fake_stack = []
-    while frame:
-        stack_content = []
-        for i in range(frame.f_stacktop - frame.f_localsplus):
-            stack_content.append(<object>frame.f_localsplus[i])
-        fake_stack.append(Frame(
-            <object> frame.f_code,
-            <object> frame.f_lasti,
-            <object> frame.f_locals,
-            stack_content,
-            ))
-        frame = frame.f_back
-    return fake_stack
+def save_generator_state(gen):
+    cdef PyFrameObject *frame = <PyFrameObject *>gen.gi_frame
+
+    stack_size = frame.f_stacktop - frame.f_localsplus
+    print "stack size for", gen, ":", stack_size
+    stack_content = []
+    for i in range(stack_size):
+        stack_content.append(<object>frame.f_localsplus[i])
+    return Frame(<object>frame.f_lasti, stack_content)
 
 
-cdef PyObject* pyeval_fast_forward(PyFrameObject *frame, int exc):
-    global jump_stack_idx
-    frame_obj = <object> frame
-    if frame_obj.f_code == jump_stack[jump_stack_idx].f_code:
-        print 'jumping', frame_obj, 'to', jump_stack[-1].f_lasti
+def restore_generator(gen, saved_frame):
+    cdef PyFrameObject *frame = <PyFrameObject *>gen.gi_frame
 
-        # Fast forward the instruction pointer
-        frame.f_lasti = jump_stack[jump_stack_idx].f_lasti
-        frame.f_locals = <PyObject*>jump_stack[jump_stack_idx].f_locals
-        for i, o in enumerate(jump_stack[jump_stack_idx].stack_content):
-            frame.f_valuestack[i] = <PyObject*> o
-        jump_stack_idx -= 1
+    frame.f_lasti = saved_frame.f_lasti
+    for i, o in enumerate(saved_frame.stack_content):
+        # TODO: I need to increment the refcount for the stack content but i don't
+        # know how to do that here.
+        frame.f_valuestack[i] = <PyObject*> o
 
-    print 'evaluating', frame_obj
-    return _PyEval_EvalFrameDefault(frame, exc)
-
-
-def jump(func, fake_stack):
-    global jump_stack_idx
-    jump_stack.clear()
-    jump_stack.extend(fake_stack)
-
-    while func.__code__.co_code != jump_stack[-1].f_code.co_code:
-        del jump_stack[-1]
-    print 'The jump stack:', jump_stack
-    jump_stack_idx = len(jump_stack) - 1
-
-    cdef PyThreadState *state = PyThreadState_Get()
-    state.interp.eval_frame = pyeval_fast_forward
-    func()
-    state.interp.eval_frame = _PyEval_EvalFrameDefault
+    return gen
 
 
 funcall_log = {}
