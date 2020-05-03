@@ -38,8 +38,7 @@ class Runner:
             dill.dump(self.functions, f)
 
         # Save the state of the interpreter to disk
-        dill.dump_session(
-            "__checkpoint__/interpreter%02d.dill" % self.checkpoint_count)
+        dill.dump_session("__checkpoint__/interpreter%02d.dill" % self.checkpoint_count)
 
         self.functions.clear()
         self.checkpoint_count += 1
@@ -53,9 +52,9 @@ class Runner:
         if frame.f_code.co_filename not in self.modules:
             return
 
-        #print("---------")
-        #print(frame.f_code.co_filename, frame.f_code.co_name)
-        #print(frame.f_code.co_consts)
+        # print("---------")
+        # print(frame.f_code.co_filename, frame.f_code.co_name)
+        # print(frame.f_code.co_consts)
 
         # keep a fully qualified name for the function. and a sha1 of its code.
         # if we hold references to the frame object, we might cause a lot of

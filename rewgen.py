@@ -1,5 +1,6 @@
 import jump
 
+
 def run_with_checkpoints(gen):
     checkpoints = []
     for _ in gen:
@@ -8,19 +9,20 @@ def run_with_checkpoints(gen):
 
 
 def processing():
-    step = 'step1'
+    step = "step1"
     print(step)
     yield
 
-    step = 'step2'
+    step = "step2"
     print(step)
     yield
 
-    step = 'step3'
+    step = "step3"
     print(step)
     yield
 
-    print('end')
+    print("end")
+
 
 def main():
     checkpoints = run_with_checkpoints(processing())
@@ -28,8 +30,9 @@ def main():
     gen_restored = processing()
     jump.restore_generator(gen_restored, checkpoints[1])
 
-    print('-----After restore-----')
+    print("-----After restore-----")
     for _ in gen_restored:
         pass
+
 
 main()
