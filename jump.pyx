@@ -1,28 +1,24 @@
 import hashlib
-import collections
-
-Frame = collections.namedtuple('Frame',
-        ('f_lasti', 'stack_content', ))
 
 
 def save_generator_state(gen):
     cdef PyFrameObject *frame = <PyFrameObject *>gen.gi_frame
 
     stack_size = frame.f_stacktop - frame.f_localsplus
-    print "stack size for", gen, ":", stack_size
+    print("stack size for", gen, ":", stack_size)
     stack_content = []
     for i in range(stack_size):
         stack_content.append(<object>frame.f_localsplus[i])
-    return Frame(<object>frame.f_lasti, stack_content)
+    return (<object>frame.f_lasti, stack_content)
 
 
 def restore_generator(gen, saved_frame):
     cdef PyFrameObject *frame = <PyFrameObject *>gen.gi_frame
 
-    frame.f_lasti = saved_frame.f_lasti
-    for i, o in enumerate(saved_frame.stack_content):
-        # TODO: I need to increment the refcount for the stack content but i don't
-        # know how to do that here.
+    frame.f_lasti = saved_frame[0]
+    for i, o in enumerate(saved_frame[1]):
+        # TODO: Make sure this is necessary and that i'm not leaking a reference here.
+        Py_INCREF(o)
         frame.f_valuestack[i] = <PyObject*> o
 
     return gen
@@ -30,18 +26,6 @@ def restore_generator(gen, saved_frame):
 
 funcall_log = {}
 modules = []
-
-def print_frame(frame):
-    cdef PyFrameObject *f = <PyFrameObject *> frame
-
-    if not frame:
-        return 0
-
-    indent = print_frame(frame.f_back)
-
-    print ' ' * indent, frame.f_locals.get('func', '?'), f.f_lasti
-
-    return indent + 1
 
 
 cdef hash_code(f_code):
@@ -62,13 +46,14 @@ cdef PyObject* pyeval_log_funcall_entry(PyFrameObject *frame, int exc):
       state.interp.eval_frame = pyeval_log_funcall_entry
       return r
 
-  print "---------Tracing-----"
-  print frame_obj.f_code.co_filename, frame_obj.f_code.co_name
+  print("---------Tracing-----")
+  print(frame_obj.f_code.co_filename, frame_obj.f_code.co_name)
 
-  # keep a fully qualified name for the function. and a sha1 of its code.
-  # if we hold references to the frame object, we might cause a lot of
+  # Keep a fully qualified name for the function and a sha1 of its code.
+  # If we hold references to the frame object, we might cause a lot of
   # unexpected garbage to be kept around.
-  funcall_log[(frame_obj.f_code.co_filename, frame_obj.f_code.co_name)] = hash_code(frame_obj.f_code)
+  funcall_log[(frame_obj.f_code.co_filename, frame_obj.f_code.co_name)] = hash_code(
+          frame_obj.f_code)
 
   return _PyEval_EvalFrameDefault(frame, exc)
 
