@@ -9,7 +9,7 @@ funcall_log = {}
 modules = []
 
 
-cdef hash_code(f_code):
+def hash_code(f_code):
   h = hashlib.sha1(f_code.co_code)
   h.update(str(f_code.co_consts).encode("utf-8"))
   return h.digest()
@@ -27,8 +27,8 @@ cdef PyObject* pyeval_log_funcall_entry(PyFrameObject *frame, int exc):
       state.interp.eval_frame = pyeval_log_funcall_entry
       return r
 
-  print("---------Tracing-----")
-  print(frame_obj.f_code.co_filename, frame_obj.f_code.co_name)
+  #print("---------Tracing-----")
+  #print(frame_obj.f_code.co_filename, frame_obj.f_code.co_name)
 
   # Keep a fully qualified name for the function and a sha1 of its code.
   # If we hold references to the frame object, we might cause a lot of
