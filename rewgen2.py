@@ -19,21 +19,25 @@ def save_checkpoints(gen):
 
 
 def processing():
+    lst = []
     step = "step1"
     a = 1
-    print(step)
+    lst.append(step)
+    print(step, lst)
     yield Checkpoint("step1")
 
     step = "step2"
     b = 2
     a *= 2
-    print(step)
+    lst.append(step)
+    print(step, lst)
     yield Checkpoint("step2")
 
     step = "step3"
     c = 2
     a *= 2
-    print(step)
+    lst.append(step)
+    print(step, lst)
     yield Checkpoint("step3")
 
     print("end")
