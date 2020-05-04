@@ -1,18 +1,12 @@
-import hashlib
-
-
 def save_generator_state(gen):
     cdef PyFrameObject *frame = <PyFrameObject *>gen.gi_frame
 
     stack_size = frame.f_stacktop - frame.f_localsplus
-    print("stack size for", gen, ":", stack_size)
-    stack_content = []
-    for i in range(stack_size):
-        stack_obj = None
-        if frame.f_localsplus[i]:
-            stack_obj = <object>frame.f_localsplus[i]
-        stack_content.append(stack_obj)
-    return (<object>frame.f_lasti, stack_content)
+    stack_content = [
+            <object>frame.f_localsplus[i] if frame.f_localsplus[i] else None
+            for i in range(stack_size)
+        ]
+    return (frame.f_lasti, stack_content)
 
 
 def restore_generator(gen, saved_frame):
@@ -31,6 +25,8 @@ def restore_generator(gen, saved_frame):
 
     return gen
 
+
+import hashlib
 
 funcall_log = {}
 modules = []

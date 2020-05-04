@@ -1,42 +1,35 @@
 import jump
 
 
-def run_with_checkpoints(gen):
-    checkpoints = []
-    for _ in gen:
-        checkpoints.append(jump.save_generator_state(gen))
-        print('Checkpointed stored')
-    return checkpoints
-
-
 def processing():
     step = "step1"
-    a = 2.1
-    print(step, a)
-    yield
+    a = 2
+    print(step, "a=", a)
+    yield  # Save a checkpoint here
 
     step = "step2"
-    b = 2.2
+    b = 2
     a *= b
-    print(step, a)
-    yield
+    print(step, "a=", a)
+    yield  # Save a checkpoint here
 
     step = "step3"
-    c = 2.3
+    c = 2
     a *= c
-    print(step, a)
-    yield
+    print(step, "a=", a)
+    yield  # Save a checkpoint here
 
     print("end")
 
 
 def main():
-    checkpoints = run_with_checkpoints(processing())
+    print("-----Run the process to completion, saving checkpoints-----")
+    gen = processing()
+    checkpoints = [jump.save_generator_state(gen) for _ in gen]
 
+    print("-----Restart the process from the second checkpoint-----")
     gen_restored = processing()
     jump.restore_generator(gen_restored, checkpoints[1])
-
-    print("-----After restore-----")
     for _ in gen_restored:
         pass
 

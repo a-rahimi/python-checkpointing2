@@ -6,8 +6,8 @@ import jump
 
 
 class Checkpoint:
-    def __init__(self, msg):
-        self.msg = msg
+    def __init__(self, name):
+        self.name = name
         self.generator_state = None
 
 
@@ -15,19 +15,24 @@ def save_checkpoints(gen):
     os.makedirs("__checkpoints__", exist_ok=True)
     for ckpt in gen:
         ckpt.generator_state = jump.save_generator_state(gen)
-        pickle.dump(ckpt, open(os.path.join("__checkpoints__", ckpt.msg), "wb"))
+        pickle.dump(ckpt, open(os.path.join("__checkpoints__", ckpt.name), "wb"))
 
 
 def processing():
     step = "step1"
+    a = 1
     print(step)
     yield Checkpoint("step1")
 
     step = "step2"
+    b = 2
+    a *= 2
     print(step)
     yield Checkpoint("step2")
 
     step = "step3"
+    c = 2
+    a *= 2
     print(step)
     yield Checkpoint("step3")
 
