@@ -12,7 +12,7 @@ def processing():
 
     t = yield  # Save a checkpoint here
     if t:
-        print('Resuming from step2')
+        print("Resuming from step2")
     step = "step2"
     b = 2
     a *= b
@@ -21,7 +21,7 @@ def processing():
 
     t = yield  # Save a checkpoint here
     if t:
-        print('Resuming from step3')
+        print("Resuming from step3")
     step = "step3"
     c = 2
     a *= c
@@ -30,7 +30,7 @@ def processing():
 
     t = yield  # Save a checkpoint here
     if t:
-        print('Resuming from end')
+        print("Resuming from end")
     yield  # Save a checkpoint here
     print("end")
 
