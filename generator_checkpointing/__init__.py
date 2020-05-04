@@ -1,18 +1,28 @@
 from typing import Generator, Set, Tuple
 import collections
 import glob
-import importlib
+import importlib.util
 import os
 import pickle
 import re
 
-import calltrace
-import save_restore_generators as jump
+
+import generator_checkpointing.calltrace as calltrace
+import generator_checkpointing.save_restore_generators as gen_surgery
 
 Checkpoint = collections.namedtuple("Checkpoint", ["name", "count", "generator_state"])
 
 
-def change_point() -> str:
+def _change_point() -> str:
+    """Identify a function call log whose functions have been modified.
+
+    Browse the call logs in chronological order and report the first call log that
+    contains a function call whose source code has changed since the call log was 
+    recorded.
+
+    If no such call log is found, returns the last call log. If there are no
+    call logs at all, returns an empty string.
+    """
     module_cache = {}
 
     # Inspect each checkpoint in sequence to see if the code invoked has changed
@@ -31,6 +41,8 @@ def change_point() -> str:
                 module = module_cache[filename]
             except KeyError:
                 spec = importlib.util.spec_from_file_location("temporary", filename)
+                if not spec:
+                    raise RuntimeError(f"Could not load {filename}")
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
                 module_cache[filename] = module
@@ -39,7 +51,9 @@ def change_point() -> str:
             current_hash = calltrace.hash_code(getattr(module, function_name).__code__)
 
             if current_hash != expected_hash:
-                print(trace_fname, "has change", filename, function_name)
+                log.info(
+                    "Calllog %s has change %s:%s", trace_fname, filename, function_name
+                )
                 return last_intact_trace_fname
 
         last_intact_trace_fname = trace_fname
@@ -47,8 +61,12 @@ def change_point() -> str:
     return last_intact_trace_fname
 
 
-def checkpoint_to_resume() -> Tuple[int, str]:
-    trace_fname = change_point()
+def _checkpoint_to_resume() -> Tuple[int, str]:
+    """Identify the checkpoint to resume.
+
+    Find call log with a modified function and reports its corresponding checkpoint.
+    """
+    trace_fname = _change_point()
     if not trace_fname:
         return -1, ""
 
@@ -59,14 +77,19 @@ def checkpoint_to_resume() -> Tuple[int, str]:
     return int(m[3]), m[1] + "checkpoint" + m[3] + m[4]
 
 
-def resume_and_save_checkpoints(gen: Generator, module_names: Set[str]):
+def resume_and_save_checkpoints(gen: Generator, module_names: Set[str]) -> None:
+    """Resume a generator at the last checkpoint that contains unmodified code.
+
+    Restore the generator from a checkpoint. Chooses the latest checkpoint that
+    can be reached without traversing modified code.
+    """
     os.makedirs("__checkpoints__", exist_ok=True)
 
-    checkpoint_i, checkpoint_fname = checkpoint_to_resume()
+    checkpoint_i, checkpoint_fname = _checkpoint_to_resume()
     if checkpoint_fname:
         with open(checkpoint_fname, "rb") as f:
             ckpt = pickle.load(f)
-        jump.restore_generator(gen, ckpt.generator_state)
+        gen_surgery.restore_generator(gen, ckpt.generator_state)
         resume_point = True
     else:
         resume_point = None
@@ -88,7 +111,9 @@ def resume_and_save_checkpoints(gen: Generator, module_names: Set[str]):
         calltrace.stop_trace_funcalls()
 
         # Save the checkpoint
-        ckpt = Checkpoint(checkpoint_name, checkpoint_i, jump.save_generator_state(gen))
+        ckpt = Checkpoint(
+            checkpoint_name, checkpoint_i, gen_surgery.save_generator_state(gen)
+        )
         with open("__checkpoints__/checkpoint%02d.pkl" % ckpt.count, "wb") as f:
             pickle.dump(ckpt, f)
 
@@ -104,42 +129,19 @@ def resume_and_save_checkpoints(gen: Generator, module_names: Set[str]):
         calltrace.trace_funcalls(module_names)
 
 
-def step0():
-    print(">step 1")
+def save_checkpoints(gen: Generator):
+    os.makedirs("__checkpoints__", exist_ok=True)
+    for checkpoint_name in gen:
+        ckpt = Checkpoint(checkpoint_name, gen_surgery.save_generator_state(gen))
+        pickle.dump(ckpt, open(os.path.join("__checkpoints__", ckpt.name), "wb"))
 
 
-def step1():
-    print(">step 2")
+def resume_from_checkpoint(gen: Generator, checkpoint_name: str):
+    with open(os.path.join("__checkpoints__", checkpoint_name), "rb") as f:
+        ckpt = pickle.load(f)
 
+    gen_surgery.restore_generator(gen, ckpt.generator_state)
 
-def step2():
-    print(">step 3")
-
-
-def processing():
-    print('starting')
-
-    if (yield "step0"):
-        print("Resuming before step0")
-
-    step0()
-
-    if (yield "step1"):
-        print("Resuming before step1")
-
-    step1()
-
-    if (yield "step2"):
-        print("Resuming before step2")
-
-    step2()
-
-    print("done")
-
-
-def main():
-    resume_and_save_checkpoints(processing(), [__file__])
-
-
-if __name__ == "__main__":
-    main()
+    gen.send(True)
+    for _ in gen:
+        pass

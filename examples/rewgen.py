@@ -1,6 +1,6 @@
 import copy
 
-import save_restore_generators as jump
+import generator_checkpointing.save_restore_generators as gen_surgery
 
 
 def processing():
@@ -35,11 +35,11 @@ def processing():
 def main():
     print("-----Run processing to completion, saving checkpoints-----")
     gen = processing()
-    checkpoints = [copy.deepcopy(jump.save_generator_state(gen)) for _ in gen]
+    checkpoints = [copy.deepcopy(gen_surgery.save_generator_state(gen)) for _ in gen]
 
     print("-----Restart processing from the first checkpoint-----")
     gen = processing()
-    jump.restore_generator(gen, checkpoints[0])
+    gen_surgery.restore_generator(gen, checkpoints[0])
     gen.send(True)
     for _ in gen:
         pass

@@ -1,6 +1,4 @@
-import inspect
-import sys
-import calltrace
+import generator_checkpointing.calltrace as calltrace
 
 import calllog_subordinate
 

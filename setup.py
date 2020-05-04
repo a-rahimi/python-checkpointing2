@@ -1,17 +1,15 @@
 from distutils.core import setup
+import setuptools
 from Cython.Build import cythonize
 import sys
 
 setup(
-    name="save_restore_generators",
+    name="generator_checkpointing",
+    version="0.0.0",
     ext_modules=cythonize(
-        "save_restore_generators.pyx", compiler_directives={"language_level": "3"}
+        "generator_checkpointing/*.pyx", compiler_directives={"language_level": "3"}
     ),
+    packages=["generator_checkpointing"],
     requires=["Cython"],
-)
-
-setup(
-    name="calltrace",
-    ext_modules=cythonize("calltrace.pyx", compiler_directives={"language_level": "3"}),
-    requires=["Cython"],
+    python_requires='>=3.6',
 )

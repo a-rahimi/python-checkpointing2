@@ -1,4 +1,4 @@
-from jump cimport *
+from generator_checkpointing.jump cimport *
 
 
 def save_generator_state(gen):
