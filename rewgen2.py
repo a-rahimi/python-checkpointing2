@@ -41,8 +41,7 @@ def processing():
     lst.append(step)
     print(step, lst)
 
-    t = yield "step1"
-    if t:
+    if (yield "step1"):
         print("Resuming after step1")
 
     step = "step2"
@@ -51,8 +50,7 @@ def processing():
     lst.append(step)
     print(step, lst)
 
-    t = yield "step2"
-    if t:
+    if (yield "step2"):
         print("Resuming after step2")
 
     step = "step3"
@@ -61,8 +59,7 @@ def processing():
     lst.append(step)
     print(step, lst)
 
-    t = yield "step3"
-    if t:
+    if (yield "step3"):
         print("Resuming after step3")
 
     print("end")

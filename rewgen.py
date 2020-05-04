@@ -10,8 +10,7 @@ def processing():
     lst.append(step)
     print(step, "a=", a, "lst=", lst)
 
-    t = yield  # Save a checkpoint here
-    if t:
+    if (yield):  # Save a checkpoint here
         print("Resuming from step2")
     step = "step2"
     b = 2
@@ -19,8 +18,7 @@ def processing():
     lst.append(step)
     print(step, "a=", a, "lst=", lst)
 
-    t = yield  # Save a checkpoint here
-    if t:
+    if (yield):  # Save a checkpoint here
         print("Resuming from step3")
     step = "step3"
     c = 2
@@ -28,8 +26,7 @@ def processing():
     lst.append(step)
     print(step, "a=", a, "lst=", lst)
 
-    t = yield  # Save a checkpoint here
-    if t:
+    if (yield):  # Save a checkpoint here
         print("Resuming from end")
     yield  # Save a checkpoint here
     print("end")
