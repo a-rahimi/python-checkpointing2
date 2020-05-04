@@ -1,9 +1,10 @@
-from typing import Generator, Set
+from typing import Generator, Set, Tuple
 import collections
 import glob
 import importlib
 import os
 import pickle
+import re
 
 import calltrace
 import save_restore_generators as jump
@@ -11,12 +12,12 @@ import save_restore_generators as jump
 Checkpoint = collections.namedtuple("Checkpoint", ["name", "count", "generator_state"])
 
 
-def change_point():
+def change_point() -> str:
     module_cache = {}
 
     # Inspect each checkpoint in sequence to see if the code invoked has changed
+    last_intact_trace_fname: str = ""
     for trace_fname in sorted(glob.glob("__checkpoints__/functions*.pkl")):
-        print("Inspecting", trace_fname)
         with open(trace_fname, "rb") as f:
             functions = pickle.load(f)
 
@@ -38,14 +39,49 @@ def change_point():
             current_hash = calltrace.hash_code(getattr(module, function_name).__code__)
 
             if current_hash != expected_hash:
-                return trace_fname
+                print(trace_fname, "has change", filename, function_name)
+                return last_intact_trace_fname
+
+        last_intact_trace_fname = trace_fname
+
+    return last_intact_trace_fname
 
 
-def save_checkpoints(gen: Generator, module_names: Set[str]):
+def checkpoint_to_resume() -> Tuple[int, str]:
+    trace_fname = change_point()
+    if not trace_fname:
+        return -1, ""
+
+    m = re.match(r"(.*/)(functions)(\d*)(\.pkl)", trace_fname)
+    if not m:
+        raise RuntimeError(f"Bad calltrace file path {trace_fname}")
+
+    return int(m[3]), m[1] + "checkpoint" + m[3] + m[4]
+
+
+def resume_and_save_checkpoints(gen: Generator, module_names: Set[str]):
     os.makedirs("__checkpoints__", exist_ok=True)
 
+    checkpoint_i, checkpoint_fname = checkpoint_to_resume()
+    if checkpoint_fname:
+        with open(checkpoint_fname, "rb") as f:
+            ckpt = pickle.load(f)
+        jump.restore_generator(gen, ckpt.generator_state)
+        resume_point = True
+    else:
+        resume_point = None
+
+    print("Starting from checkpoint", checkpoint_i, checkpoint_fname)
+
     calltrace.trace_funcalls(module_names)
-    for checkpoint_i, checkpoint_name in enumerate(gen):
+    while True:
+        try:
+            checkpoint_name = gen.send(resume_point)
+        except StopIteration:
+            break
+        resume_point = False
+        checkpoint_i += 1
+
         # Turn off tracing while we're processing this checkpoint. This isn't
         # strictly necessary but as the code changes, this makes it easier to reason
         # about infinite loops.
@@ -68,31 +104,41 @@ def save_checkpoints(gen: Generator, module_names: Set[str]):
         calltrace.trace_funcalls(module_names)
 
 
-def step1():
+def step0():
     print(">step 1")
 
 
-def step2():
+def step1():
     print(">step 2")
 
 
-def step3():
+def step2():
     print(">step 3")
 
 
 def processing():
-    yield "step1"
+    print('starting')
+
+    if (yield "step0"):
+        print("Resuming before step0")
+
+    step0()
+
+    if (yield "step1"):
+        print("Resuming before step1")
+
     step1()
-    yield "step2"
+
+    if (yield "step2"):
+        print("Resuming before step2")
+
     step2()
-    yield "step3"
-    step3()
+
+    print("done")
 
 
 def main():
-    print("Code changed at", change_point())
-
-    save_checkpoints(processing(), [__file__])
+    resume_and_save_checkpoints(processing(), [__file__])
 
 
 if __name__ == "__main__":
