@@ -5,20 +5,26 @@ def run_with_checkpoints(gen):
     checkpoints = []
     for _ in gen:
         checkpoints.append(jump.save_generator_state(gen))
+        print('Checkpointed stored')
     return checkpoints
 
 
 def processing():
     step = "step1"
-    print(step)
+    a = 2.1
+    print(step, a)
     yield
 
     step = "step2"
-    print(step)
+    b = 2.2
+    a *= b
+    print(step, a)
     yield
 
     step = "step3"
-    print(step)
+    c = 2.3
+    a *= c
+    print(step, a)
     yield
 
     print("end")

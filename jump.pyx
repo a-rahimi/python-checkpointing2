@@ -8,18 +8,26 @@ def save_generator_state(gen):
     print("stack size for", gen, ":", stack_size)
     stack_content = []
     for i in range(stack_size):
-        stack_content.append(<object>frame.f_localsplus[i])
+        stack_obj = None
+        if frame.f_localsplus[i]:
+            stack_obj = <object>frame.f_localsplus[i]
+        stack_content.append(stack_obj)
     return (<object>frame.f_lasti, stack_content)
 
 
 def restore_generator(gen, saved_frame):
     cdef PyFrameObject *frame = <PyFrameObject *>gen.gi_frame
+    saved_f_lasti, saved_stack_content = saved_frame
 
-    frame.f_lasti = saved_frame[0]
-    for i, o in enumerate(saved_frame[1]):
+    frame.f_lasti = saved_f_lasti
+
+    for i, o in enumerate(saved_stack_content):
         # TODO: Make sure this is necessary and that i'm not leaking a reference here.
         Py_INCREF(o)
-        frame.f_valuestack[i] = <PyObject*> o
+        frame.f_localsplus[i] = <PyObject*> o
+
+    frame.f_stacktop = frame.f_localsplus + <int>i + 1
+    assert frame.f_stacktop - frame.f_localsplus == len(saved_stack_content)
 
     return gen
 
