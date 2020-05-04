@@ -1,3 +1,6 @@
+# Forked and heavily modified from
+#   https://github.com/Elizaveta239/frame-eval
+
 from jump cimport *
 
 import hashlib
