@@ -2,7 +2,7 @@ import os
 import pickle
 import sys
 
-import jump
+import save_restore_generators as jump
 
 
 class Checkpoint:
