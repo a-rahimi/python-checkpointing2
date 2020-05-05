@@ -1,7 +1,9 @@
+from typing import Generator, List, Tuple
+
 from generator_checkpointing.jump cimport *
 
 
-def save_generator_state(gen):
+def save_generator_state(gen: Generator) -> Tuple[int, List]:
     cdef PyFrameObject *frame = <PyFrameObject *>gen.gi_frame
 
     stack_size = frame.f_stacktop - frame.f_localsplus
@@ -12,7 +14,7 @@ def save_generator_state(gen):
     return (frame.f_lasti, stack_content)
 
 
-def restore_generator(gen, saved_frame):
+def restore_generator(gen: Generator, saved_frame: Tuple[int, List]) -> Generator:
     cdef PyFrameObject *frame = <PyFrameObject *>gen.gi_frame
     saved_f_lasti, saved_stack_content = saved_frame
 

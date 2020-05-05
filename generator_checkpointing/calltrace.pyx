@@ -1,15 +1,17 @@
 # Forked and heavily modified from
 #   https://github.com/Elizaveta239/frame-eval
 
+from typing import Dict, Iterable, List, Tuple
+
 from generator_checkpointing.jump cimport *
 
 import hashlib
 
-funcall_log = {}
-modules = []
+funcall_log: Dict[Tuple[str, str], bytes] = {}
+modules: List[str] = []
 
 
-def hash_code(f_code):
+def hash_code(f_code) -> bytes:
   h = hashlib.sha1(f_code.co_code)
   h.update(str(f_code.co_consts).encode("utf-8"))
   return h.digest()
@@ -39,13 +41,13 @@ cdef PyObject* pyeval_log_funcall_entry(PyFrameObject *frame, int exc):
   return _PyEval_EvalFrameDefault(frame, exc)
 
 
-def trace_funcalls(module_fnames):
+def trace_funcalls(module_fnames: Iterable[str]) -> None:
     cdef PyThreadState *state = PyThreadState_Get()
     modules.clear()
     modules.extend(module_fnames)
     state.interp.eval_frame = pyeval_log_funcall_entry
 
 
-def stop_trace_funcalls():
+def stop_trace_funcalls() -> None:
     cdef PyThreadState *state = PyThreadState_Get()
     state.interp.eval_frame = _PyEval_EvalFrameDefault
