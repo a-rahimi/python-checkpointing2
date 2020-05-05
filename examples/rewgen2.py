@@ -1,3 +1,7 @@
+"""Illustrate saving the state of a generator to disk and starting it up from
+a checkpoint.
+"""
+
 import sys
 
 from generator_checkpointing import save_checkpoints, resume_from_checkpoint

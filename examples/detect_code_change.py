@@ -1,10 +1,10 @@
-from typing import Generator, Set, Tuple
-import collections
-import glob
-import importlib.util
-import os
-import pickle
-import re
+"""Illustrate saving checkpoints and resuming from the last modified function.
+
+Run this code first to generate the call graph and breakpoints. Then modify one
+of the functions step0, step1, or step2. When you rerun the code, it will
+resume from whichever function you modified.
+"""
+
 
 from generator_checkpointing import resume_and_save_checkpoints
 

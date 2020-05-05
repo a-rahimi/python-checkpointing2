@@ -1,3 +1,6 @@
+"""Public API for generator-based checkpointing.
+"""
+
 from typing import Generator, Set, Tuple
 import collections
 import glob
@@ -69,7 +72,7 @@ def _checkpoint_to_resume() -> Tuple[int, str]:
     trace_fname = _change_point()
     if not trace_fname:
         return -1, ""
-
+       
     m = re.match(r"(.*/)(functions)(\d*)(\.pkl)", trace_fname)
     if not m:
         raise RuntimeError(f"Bad calltrace file path {trace_fname}")
@@ -80,8 +83,29 @@ def _checkpoint_to_resume() -> Tuple[int, str]:
 def resume_and_save_checkpoints(gen: Generator, module_names: Set[str]) -> None:
     """Resume a generator at the last checkpoint that contains unmodified code.
 
-    Restore the generator from a checkpoint. Chooses the latest checkpoint that
-    can be reached without traversing modified code.
+    This is the most automated part of this API.
+
+    Suppose you've defined your processing pipeline as a generator of the form
+
+       def process():
+          ... do some work ...
+          yield "step1"
+          ... do some work ...
+          yield "step1"
+          ....
+
+    Calling
+
+       resume_and_save_checkpoints(process(), [__file__])
+
+    starts your generator, saves its state to disk on every yield, and keeps
+    track of the functions it calls along the way. If your generator had save
+    checkpoints on a previous run of this program, resume_and_save_checkpoints
+    first restarts your generator from the the latest checkpoint that can be
+    reached without traversing a function whose code has been modified.
+
+    See README.md for a more detailed explanation and
+    examples/detect_code_change.py
     """
     os.makedirs("__checkpoints__", exist_ok=True)
 
@@ -130,6 +154,27 @@ def resume_and_save_checkpoints(gen: Generator, module_names: Set[str]) -> None:
 
 
 def save_checkpoints(gen: Generator):
+    """Simple checkpoint driver.
+
+    Suppose you've defined a generator like so:
+
+       def process():
+          ... do some work ...
+          yield "step1"
+          ... do some work ...
+          yield "step1"
+          ....
+
+    To execute this generator and save checkpoints on every yield, invoke
+
+       save_checkpoints(process())
+
+    Every yield specifies the name of a checkpoint file in which the state of the
+    generatoe is saved as a pickle. You can then restore the generator with 
+    resume_from_checkpoint().
+
+    For further examples, see examples/rewgen.py and examples/rewgen2.py.
+    """
     os.makedirs("__checkpoints__", exist_ok=True)
     for checkpoint_name in gen:
         ckpt = Checkpoint(checkpoint_name, gen_surgery.save_generator_state(gen))
@@ -137,6 +182,39 @@ def save_checkpoints(gen: Generator):
 
 
 def resume_from_checkpoint(gen: Generator, checkpoint_name: str):
+    """Simple checkpoint restorer.
+
+    Suppose you've written your generator as described in save_checkpoints(),
+
+       def process():
+          ... do some work ...
+          yield "step1"
+          ... do some work ...
+          yield "step1"
+          ....
+
+    and have saved its state as a pickle with save_checkpoints(). You can restore
+    its state to the state it had when it executed 'yield "step1"' and resumes
+    its execution from there by calling
+
+       resume_from_checkpoint(process(), '__checkpoints__/step1')
+
+    The yield point where the generator is resurrected evaluates to "True", whereas
+    all subsequent yield pints evaluate to None. You can use this fact to restore
+    the portion of that state of the generator that's otherwise hard to restore. For
+    example, if you need to restore a file object at step1, your restore code could
+    look like
+
+      def processing():
+         f = open('file.dat')
+         ... processs file ...
+
+         if (yield):   # Save a checkpoint
+           # We're being restored from a checkpoint here. Reopen the file
+           f = open('file.dat')
+
+         ... process file some more...
+    """
     with open(os.path.join("__checkpoints__", checkpoint_name), "rb") as f:
         ckpt = pickle.load(f)
 

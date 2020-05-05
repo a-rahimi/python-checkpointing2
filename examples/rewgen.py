@@ -1,3 +1,6 @@
+"""Illustrate snapshotting a generator and rewinding it.
+"""
+
 import copy
 
 import generator_checkpointing.save_restore_generators as gen_surgery

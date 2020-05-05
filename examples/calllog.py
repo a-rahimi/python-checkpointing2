@@ -1,3 +1,16 @@
+"""Illustrate the call tracer.
+
+
+$ python3 calllog.py
+...
+[('calllog.py', 'level1'),
+ ('calllog.py', 'level2'),
+ ('calllog.py', 'level3'),
+ ('/Users/alrhim/Runner/examples/calllog_subordinate.py', 'step2_1')]
+"""
+
+import pprint
+
 import generator_checkpointing.calltrace as calltrace
 
 import calllog_subordinate
@@ -32,4 +45,4 @@ def main():
 
 
 main()
-print(calltrace.funcall_log)
+pprint.pprint(list(calltrace.funcall_log.keys()))
