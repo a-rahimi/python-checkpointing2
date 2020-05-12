@@ -1,7 +1,8 @@
-"""Illustrate snapshotting a generator and rewinding it.
+"""Illustrate snapshotting a function and restarting it from an arbitrary place.
 """
 
 import copy
+import logging
 
 import function_checkpointing.save_restore as save_restore
 
@@ -53,11 +54,15 @@ def processing(a, b):
 
 
 def main():
+    logging.basicConfig()
+    logging.getLogger('function_checkpointing.save_restore').setLevel(logging.DEBUG)
+    logging.root.setLevel(logging.DEBUG)
+
     print("---Run processing to completion, saving checkpoints---")
     processing(a=2, b=3)
 
     if len(checkpoints) == 4:
-        print("---There are 3 checkpoints. Fastforward to 2nd checkpont---")
+        print("---There are 4 checkpoints. Fastforward to 2nd checkpont---")
         save_restore.jump(checkpoints[1])
     else:
         print("---There are only %d checkpoints now---" % len(checkpoints))
