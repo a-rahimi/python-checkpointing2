@@ -3,7 +3,7 @@
 
 import copy
 
-import save_restore
+import function_checkpointing.save_restore as save_restore
 
 checkpoints = []
 
@@ -18,6 +18,11 @@ def save_checkpoint():
     checkpoints.append(copy.deepcopy(ckpt))
     return True
 
+def subroutine(a):
+    print('entering subroutine. a="%d' % a)
+    save_checkpoint()
+    print('leaving subroutine. a="%d' % a)
+
 def processing(a, b):
     lst = []
     step = "step1"
@@ -25,6 +30,8 @@ def processing(a, b):
     print(step, "a=", a, "lst=", lst)
 
     save_checkpoint()
+
+    subroutine(a)
 
     step = "step2"
     b = 2

@@ -2,7 +2,7 @@ from typing import Generator, List, Tuple
 SavedStackFrame = Tuple[int, List, bytes]
 import dis
 
-from jump cimport *
+from function_checkpointing.jump cimport *
 
 class NULLObject(object):
     pass

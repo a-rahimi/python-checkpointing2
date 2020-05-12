@@ -3,7 +3,7 @@
 
 from typing import Dict, Iterable, List, Tuple
 
-from generator_checkpointing.jump cimport *
+from function_checkpointing.jump cimport *
 
 import hashlib
 
