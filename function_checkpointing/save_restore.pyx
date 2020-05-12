@@ -11,20 +11,20 @@ def save_jump() -> List[SavedStackFrame]:
     saved_stack: List[SavedStackFrame] = []
 
     if PyThreadState_Get().interp.eval_frame == pyeval_fast_forward:
+        set_evaluator()
         print('save_jump In the middle of a resume. Not saving.')
         return []
 
     cdef PyFrameObject *frame = PyEval_GetFrame()
-    cdef child_frame_arg_count = 0  # the argcount of save_frame() above
+    cdef child_frame_arg_count = 0  # initially, the argcount of save_jump()
     while frame.f_back:
         print('Saving frame "%s"' % <object>frame.f_code.co_name,
               'last_i=', frame.f_lasti,
               'co_argcount:', <object>frame.f_code.co_argcount)
 
         if frame.f_code.co_kwonlyargcount:
-            print('co_kwonlyargcount:', <object>frame.f_code.co_kwonlyargcount)
             raise NotImplementedError("Can't yet handle functions with kw arguments "
-                    "in the call chain")
+                    "in the call chain. Frame: " + str(<object>frame))
 
         # Take a guess at the stack size.
 
@@ -110,20 +110,11 @@ jump_stack = []
 
 
 cdef PyObject* pyeval_fast_forward(PyFrameObject *frame, int exc):
-    cdef _PyFrameEvalFunction *old_evaluator = set_evaluator()
     global jump_stack
 
     restore_frame(frame, jump_stack.pop())
 
-    if jump_stack:
-        set_evaluator(old_evaluator)
-    else:
-        print('End of jump_stack. Removing pyeval_fast_forward handler.')
-    
-    print('>_PyEval_EvalFrameDefault')
-    r = _PyEval_EvalFrameDefault(frame, exc)
-    print('<_PyEval_EvalFrameDefault')
-    return r
+    return _PyEval_EvalFrameDefault(frame, exc)
 
 
 cdef _PyFrameEvalFunction *set_evaluator(_PyFrameEvalFunction *frame_evaluator = NULL):
@@ -143,7 +134,6 @@ def jump(saved_frames: List[SavedStackFrame]):
     jump_stack.clear()
     jump_stack.extend(list(saved_frames))
 
-    # TODO: Reconstruct the top of the stack.
     cdef PyFrameObject *f = PyEval_GetFrame()
     cdef PyFrameObject *top_frame = f
     while f.f_back:
