@@ -4,12 +4,12 @@ from Cython.Build import cythonize
 import sys
 
 setup(
-    name="generator_checkpointing",
+    name="function_checkpointing",
     version="0.0.0",
     ext_modules=cythonize(
-        "generator_checkpointing/*.pyx", compiler_directives={"language_level": "3"}
+        "function_checkpointing/*.pyx", compiler_directives={"language_level": "3"}
     ),
-    packages=["generator_checkpointing"],
+    packages=["function_checkpointing"],
     requires=["Cython"],
     python_requires='>=3.6',
 )
