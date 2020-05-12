@@ -26,14 +26,19 @@ def save_jump() -> List[SavedStackFrame]:
             raise NotImplementedError("Can't yet handle functions with kw arguments "
                     "in the call chain")
 
+        # Take a guess at the stack size.
+
+        # Add the local variables and the number of arguments we had to pass
+        # to our child frame.
+        stack_size = frame.f_valuestack - frame.f_localsplus + child_frame_arg_count
+
+        # Disassemble the currently call instruction. Add the number of arguments
+        # it needed to have on the stack.
         bytecode = dis.Bytecode(<object>frame.f_code, current_offset=frame.f_lasti)
         instructions = iter(bytecode)
         for _ in range(frame.f_lasti // 2):
             next(instructions)
         instr = next(instructions)
-
-        # the local variables
-        stack_size = frame.f_valuestack - frame.f_localsplus + child_frame_arg_count
 
         # The arguments to the CALL_FUNCTION instruction or whatever instruction
         # caused the method call.
@@ -53,6 +58,8 @@ def save_jump() -> List[SavedStackFrame]:
                     "Here is the function:\n"
                     + bytecode.dis())
 
+        # Save a copy of the stack using the above guess. Convent NULL pointers to
+        # objects to a Python object sentinel value.
         stack_content = [
                 <object>frame.f_localsplus[i] if frame.f_localsplus[i] else NULLObject
                 for i in range(stack_size)
@@ -70,19 +77,14 @@ def save_jump() -> List[SavedStackFrame]:
     return saved_stack
 
 
-cdef reconstruct_frame(PyFrameObject *frame, saved_frame: SavedStackFrame):
+cdef restore_frame(PyFrameObject *frame, saved_frame: SavedStackFrame):
     frame_obj = <object> frame
     saved_f_lasti, saved_stack_content, saved_f_code = saved_frame
 
-    # TODO: remove the f_code entry when i'm more confident this is doing
-    # the right thing
     if frame_obj.f_code != saved_f_code:
-        print("OOPS!")
-        print('Warning: trying to restore frame from wrong snapshot:',
-                '\n   called_on.f_code', frame_obj.f_code, 
-                '\n   saved_f_code', saved_f_code)
-        return
-
+        raise RuntimeError('Trying to restore frame from wrong snapshot:'
+                f'\n   called_on.f_code: {frame_obj.f_code}'
+                f'\n   saved_f_code: {saved_f_code}')
 
     print('Fast forwarding', frame_obj, 'to instruction', saved_f_lasti)
 
@@ -94,6 +96,7 @@ cdef reconstruct_frame(PyFrameObject *frame, saved_frame: SavedStackFrame):
 
     cdef int i = 0
     for o in saved_stack_content:
+        # Restore the stack. Translate the sentinel value back to NULL.
         if o == NULLObject:
             frame.f_localsplus[i] = NULL
         else:
@@ -110,7 +113,7 @@ cdef PyObject* pyeval_fast_forward(PyFrameObject *frame, int exc):
     cdef _PyFrameEvalFunction *old_evaluator = set_evaluator()
     global jump_stack
 
-    reconstruct_frame(frame, jump_stack.pop())
+    restore_frame(frame, jump_stack.pop())
 
     if jump_stack:
         set_evaluator(old_evaluator)

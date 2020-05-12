@@ -9,19 +9,19 @@ checkpoints = []
 
 def save_checkpoint():
     ckpt = save_restore.save_jump()
-    if not ckpt:
+    if ckpt:
+        checkpoints.append(copy.deepcopy(ckpt))
+        return True
+    else:
         print('Checkpoint is being resumed')
-        global checkpoints
         checkpoints.clear()
         return False
 
-    checkpoints.append(copy.deepcopy(ckpt))
-    return True
 
 def subroutine(a):
-    print('entering subroutine. a="%d' % a)
+    print('entering subroutine. a=%d' % a)
     save_checkpoint()
-    print('leaving subroutine. a="%d' % a)
+    print('leaving subroutine. a=%d' % a)
 
 def processing(a, b):
     lst = []
@@ -56,7 +56,7 @@ def main():
     print("---Run processing to completion, saving checkpoints---")
     processing(a=2, b=3)
 
-    if len(checkpoints) == 3:
+    if len(checkpoints) == 4:
         print("---There are 3 checkpoints. Fastforward to 2nd checkpont---")
         save_restore.jump(checkpoints[1])
     else:
