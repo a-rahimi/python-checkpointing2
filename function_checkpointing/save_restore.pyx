@@ -30,7 +30,7 @@ cdef object snapshot_frame(PyFrameObject *frame, int child_frame_arg_count):
 
     # Disassemble the currently call instruction. Add the number of arguments
     # it needed to have on the stack. To do this, disassemble the frame's code
-    # object and jump to the index of the last instruction execute. This is a 
+    # object and jump to the index of the last instruction execute. This is a
     # CALL instruction of some kind (CALL_FUNCTION, CALL_METHOD, etc) because
     # this frame was captured in the middle of a call to save_frame().
     bytecode = dis.Bytecode(<object>frame.f_code, current_offset=frame.f_lasti)
@@ -53,8 +53,7 @@ cdef object snapshot_frame(PyFrameObject *frame, int child_frame_arg_count):
         stack_size += 2
     elif call_instr.opname:
         raise NotImplementedError("Don't know how to checkpoint around opcode"
-                f" {call_instr.opname} "
-                "Here is the function:\n"
+                f" {call_instr.opname}. Here is the function:\n"
                 + bytecode.dis())
 
     # Save a copy of the stack using the above guess. Convent NULL pointers to
@@ -74,6 +73,17 @@ cdef object snapshot_frame(PyFrameObject *frame, int child_frame_arg_count):
 
 
 def save_jump() -> List[SavedStackFrame]:
+    """Snapshot of the stack frame leading to this call.
+
+    The ephemeral state of the stack frames between the caller and the topmost
+    stack frame are copied to a list and returned. The list can be saved as a
+    global, pickled, unpickled, etc. You can restore the call stack by calling
+    jump() on the returned object.
+
+    When this function returns, it can return two things:
+       1. The saved state of the stack so that you can jump back to this point
+       2. The empty list if you've jumped back to this point.
+    """
     saved_stack: List[SavedStackFrame] = []
 
     if PyThreadState_Get().interp.eval_frame == pyeval_fast_forward:
@@ -91,7 +101,12 @@ def save_jump() -> List[SavedStackFrame]:
     return saved_stack
 
 
-cdef object restore_frame(PyFrameObject *frame, saved_frame: SavedStackFrame):
+cdef PyObject *restore_frame(PyFrameObject *frame, saved_frame: SavedStackFrame):
+    """Restore the ephemeral state of a frame from the saved state.
+
+    Copies the frame's instruction pointer and stack content from saved_frame
+    to the frame object.
+    """
     frame_obj = <object> frame
     saved_f_lasti, saved_stack_content, saved_code = saved_frame
 
@@ -100,16 +115,18 @@ cdef object restore_frame(PyFrameObject *frame, saved_frame: SavedStackFrame):
                 f'\n   called_on.f_code.co_code: {frame_obj.f_code.co_code}'
                 f'\n   saved_code: {saved_code}')
 
-    # Fast forward the instruction pointer. f_lasti points to a CALL instruction
-    # (a CALL_METHOD or CALL_FUNCTION or similar). The frame evaluator starts
-    # executin at f_lasti+2, but in this case, we want it to re-execute the call
-    # to force it to recurse on itself. So preemptively decrement f_lasti by 2.
+    # Fast forward the instruction pointer. f_lasti points to a CALL
+    # instruction (a CALL_METHOD or CALL_FUNCTION or similar). The frame
+    # evaluator starts executing at f_lasti+2, but in this case, we want it to
+    # re-execute the call instruction to force it to recurse on itself. So
+    # preemptively decrement f_lasti by 2.
     frame.f_lasti = saved_f_lasti - 2
 
+    # Restore the content of the stack.
     cdef int i = 0
     for o in saved_stack_content:
-        # Restore the stack. Translate the sentinel value back to NULL.
         if o == NULLObject:
+            # Translate the sentinel value back to NULL.
             frame.f_localsplus[i] = NULL
         else:
             frame.f_localsplus[i] = <PyObject*> o
@@ -124,11 +141,30 @@ jump_stack = []
 
 cdef PyObject* pyeval_fast_forward(PyFrameObject *frame, int exc):
     global jump_stack
+
+    # Temporarily disable calling ourselves while we restore the frame. This
+    # lets us call Python functions in restore_frame()
+    PyThreadState_Get().interp.eval_frame = _PyEval_EvalFrameDefault
+
     restore_frame(frame, jump_stack.pop())
+
+    PyThreadState_Get().interp.eval_frame = pyeval_fast_forward
+
     return _PyEval_EvalFrameDefault(frame, exc)
 
 
 def jump(saved_frames: List[SavedStackFrame]):
+    """Restore the state of the call stack.
+
+    `saved_frames` is an object returned by save_jump().
+
+    Restores the Python stack frames, the content of the stack frames, and the
+    state of the CPython's internal call stack (the "C stack").
+
+    The program proceeds from where saved_frames was generated and continues
+    until the outermost function in the call stack returns. The return value
+    of jump() is the return value of that outerframe.
+    """
     global jump_stack
     jump_stack.clear()
     jump_stack.extend(list(saved_frames))

@@ -11,7 +11,7 @@ $ python3 calllog.py
 
 import pprint
 
-import generator_checkpointing.calltrace as calltrace
+import function_checkpointing.calltrace as calltrace
 
 import calllog_subordinate
 
