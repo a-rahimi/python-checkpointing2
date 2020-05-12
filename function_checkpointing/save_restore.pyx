@@ -15,13 +15,15 @@ def save_jump() -> List[SavedStackFrame]:
         return []
 
     cdef PyFrameObject *frame = PyEval_GetFrame()
+    cdef child_frame_arg_count = 0  # the argcount of save_frame() above
     while frame.f_back:
-        print('Saving frame with code', <object>frame.f_code.co_name,
-                'last_i=', frame.f_lasti)
-        if frame.f_code.co_argcount:
-            print('co_argcount:', <object>frame.f_code.co_argcount)
+        print('Saving frame "%s"' % <object>frame.f_code.co_name,
+              'last_i=', frame.f_lasti,
+              'co_argcount:', <object>frame.f_code.co_argcount)
+
+        if frame.f_code.co_kwonlyargcount:
             print('co_kwonlyargcount:', <object>frame.f_code.co_kwonlyargcount)
-            raise NotImplementedError("Can't yet handle functions with arguments "
+            raise NotImplementedError("Can't yet handle functions with kw arguments "
                     "in the call chain")
 
         bytecode = dis.Bytecode(<object>frame.f_code, current_offset=frame.f_lasti)
@@ -31,7 +33,7 @@ def save_jump() -> List[SavedStackFrame]:
         instr = next(instructions)
 
         # the local variables
-        stack_size = frame.f_valuestack - frame.f_localsplus
+        stack_size = frame.f_valuestack - frame.f_localsplus + child_frame_arg_count
 
         # The arguments to the CALL_FUNCTION instruction or whatever instruction
         # caused the method call.
@@ -39,16 +41,17 @@ def save_jump() -> List[SavedStackFrame]:
             # +1 for the address of the function being called
             stack_size += 1
         elif instr.opname == 'CALL_METHOD':
-            # +1 for the address of the method +1 for the object
+            # +1 for the address of the method, +1 for the object
+            stack_size += 2
+        elif instr.opname == 'CALL_FUNCTION_KW':
+            # +1 for the address of the function, +1 for the tuple containing
+            # the names of variables
             stack_size += 2
         elif instr.opname:
             raise NotImplementedError("Don't know how to checkpoint around opcode"
                     f" {instr.opname} "
                     "Here is the function:\n"
                     + bytecode.dis())
-
-        # TODO: + number of arguments in the function
-        stack_size += 0
 
         stack_content = [
                 <object>frame.f_localsplus[i] if frame.f_localsplus[i] else NULLObject
@@ -60,6 +63,8 @@ def save_jump() -> List[SavedStackFrame]:
             stack_content,
             <object>frame.f_code
             ))
+
+        child_frame_arg_count = frame.f_code.co_argcount
         frame = frame.f_back
 
     return saved_stack

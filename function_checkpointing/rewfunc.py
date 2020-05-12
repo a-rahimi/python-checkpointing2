@@ -8,7 +8,6 @@ import save_restore
 checkpoints = []
 
 def save_checkpoint():
-    print('About to save a checkpoint')
     ckpt = save_restore.save_jump()
     if not ckpt:
         print('Checkpoint is being resumed')
@@ -19,10 +18,9 @@ def save_checkpoint():
     checkpoints.append(copy.deepcopy(ckpt))
     return True
 
-def processing():
+def processing(a, b):
     lst = []
     step = "step1"
-    a = 2
     lst.append(step)
     print(step, "a=", a, "lst=", lst)
 
@@ -48,12 +46,14 @@ def processing():
 
 
 def main():
-    print("-----Run processing to completion, saving checkpoints-----")
-    processing()
+    print("---Run processing to completion, saving checkpoints---")
+    processing(a=2, b=3)
 
     if len(checkpoints) == 3:
-        print("-----Fast forward to second checkpoint-----")
+        print("---There are 3 checkpoints. Fastforward to 2nd checkpont---")
         save_restore.jump(checkpoints[1])
+    else:
+        print("---There are only %d checkpoints now---" % len(checkpoints))
 
 
 main()
