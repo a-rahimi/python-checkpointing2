@@ -64,7 +64,11 @@ cdef object snapshot_frame(PyFrameObject *frame, int child_frame_arg_count):
             for i in range(stack_size)
         ]
 
-    saved_frame = (<object> frame.f_lasti, stack_content, <object> frame.f_code)
+    saved_frame = (
+            <object> frame.f_lasti,
+            stack_content,
+            <object> frame.f_code.co_code
+            )
 
     return saved_frame
 
@@ -89,12 +93,12 @@ def save_jump() -> List[SavedStackFrame]:
 
 cdef object restore_frame(PyFrameObject *frame, saved_frame: SavedStackFrame):
     frame_obj = <object> frame
-    saved_f_lasti, saved_stack_content, saved_f_code = saved_frame
+    saved_f_lasti, saved_stack_content, saved_code = saved_frame
 
-    if frame_obj.f_code != saved_f_code:
+    if frame_obj.f_code.co_code != saved_code:
         raise RuntimeError('Trying to restore frame from wrong snapshot:'
-                f'\n   called_on.f_code: {frame_obj.f_code}'
-                f'\n   saved_f_code: {saved_f_code}')
+                f'\n   called_on.f_code.co_code: {frame_obj.f_code.co_code}'
+                f'\n   saved_code: {saved_code}')
 
     # Fast forward the instruction pointer. f_lasti points to a CALL instruction
     # (a CALL_METHOD or CALL_FUNCTION or similar). The frame evaluator starts
