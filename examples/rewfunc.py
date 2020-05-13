@@ -23,6 +23,7 @@ def subroutine(a):
     print("entering subroutine. a=%d" % a)
     if not save_checkpoint():
         print('Resuming from subroutine')
+        raise Exception()
     print("leaving subroutine. a=%d" % a)
     return 100
 
