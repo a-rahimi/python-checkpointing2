@@ -42,12 +42,10 @@ cdef PyObject* pyeval_log_funcall_entry(PyFrameObject *frame, int exc):
 
 
 def trace_funcalls(module_fnames: Iterable[str]) -> None:
-    cdef PyThreadState *state = PyThreadState_Get()
     modules.clear()
     modules.extend(module_fnames)
-    state.interp.eval_frame = pyeval_log_funcall_entry
+    PyThreadState_Get().interp.eval_frame = pyeval_log_funcall_entry
 
 
 def stop_trace_funcalls() -> None:
-    cdef PyThreadState *state = PyThreadState_Get()
-    state.interp.eval_frame = _PyEval_EvalFrameDefault
+    PyThreadState_Get().interp.eval_frame = _PyEval_EvalFrameDefault

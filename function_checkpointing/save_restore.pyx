@@ -33,9 +33,9 @@ cdef object snapshot_frame(PyFrameObject *frame, int child_frame_arg_count):
     # object and jump to the index of the last instruction execute. This is a
     # CALL instruction of some kind (CALL_FUNCTION, CALL_METHOD, etc) because
     # this frame was captured in the middle of a call to save_frame().
-    bytecode = dis.Bytecode(<object>frame.f_code, current_offset=frame.f_lasti)
+    bytecode = dis.Bytecode(<object> frame.f_code, current_offset=frame.f_lasti)
     instructions = iter(bytecode)
-    for _ in range(frame.f_lasti // 2):  # Fast forward to f_lasti
+    for _ in range(frame.f_lasti // 2):  # Fast forward to f_lasti.
         next(instructions)
     call_instr = next(instructions)
 
@@ -110,6 +110,8 @@ cdef PyObject *restore_frame(PyFrameObject *frame, saved_frame: SavedStackFrame)
     frame_obj = <object> frame
     saved_f_lasti, saved_stack_content, saved_code = saved_frame
 
+    log.debug('Restoring frame %s', frame_obj)
+
     if frame_obj.f_code.co_code != saved_code:
         raise RuntimeError('Trying to restore frame from wrong snapshot:'
                 f'\n   called_on.f_code.co_code: {frame_obj.f_code.co_code}'
@@ -145,9 +147,11 @@ cdef PyObject* pyeval_fast_forward(PyFrameObject *frame, int exc):
     # Temporarily disable calling ourselves while we restore the frame. This
     # lets us call Python functions in restore_frame()
     PyThreadState_Get().interp.eval_frame = _PyEval_EvalFrameDefault
+    log.debug('Disabled pyeval_fast_forward to restore a frame')
 
     restore_frame(frame, jump_stack.pop())
 
+    log.debug('Re-enabled pyeval_fast_forward')
     PyThreadState_Get().interp.eval_frame = pyeval_fast_forward
 
     return _PyEval_EvalFrameDefault(frame, exc)

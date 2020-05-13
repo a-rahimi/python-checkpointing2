@@ -13,17 +13,18 @@ def save_checkpoint():
     ckpt = save_restore.save_jump()
     if ckpt:
         checkpoints.append(copy.deepcopy(ckpt))
-        return True
     else:
         print("Checkpoint is being resumed")
         checkpoints.clear()
-        return False
+    return ckpt
 
 
 def subroutine(a):
     print("entering subroutine. a=%d" % a)
-    save_checkpoint()
+    if not save_checkpoint():
+        print('Resuming from subroutine')
     print("leaving subroutine. a=%d" % a)
+    return 100
 
 
 def processing(a, b):
@@ -32,9 +33,10 @@ def processing(a, b):
     lst.append(step)
     print(step, "a=", a, "lst=", lst)
 
-    save_checkpoint()
+    if not save_checkpoint():
+        print('Resuming from step1')
 
-    subroutine(a)
+    d = subroutine(a)
 
     step = "step2"
     b = 2
@@ -42,7 +44,8 @@ def processing(a, b):
     lst.append(step)
     print(step, "a=", a, "lst=", lst)
 
-    save_checkpoint()
+    if not save_checkpoint():
+        print('Resuming from step2')
 
     step = "step3"
     c = 2
@@ -50,7 +53,8 @@ def processing(a, b):
     lst.append(step)
     print(step, "a=", a, "lst=", lst)
 
-    save_checkpoint()
+    if not save_checkpoint():
+        print('Resuming from step3')
 
     print("end")
 

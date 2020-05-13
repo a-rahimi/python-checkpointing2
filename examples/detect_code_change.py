@@ -4,9 +4,8 @@ Run this code first to generate the call graph and breakpoints. Then modify one
 of the functions step0, step1, or step2. When you rerun the code, it will
 resume from whichever function you modified.
 """
-
-
-from generator_checkpointing import resume_and_save_checkpoints
+import logging
+import function_checkpointing as ckpt
 
 
 def step0():
@@ -24,17 +23,17 @@ def step2():
 def processing():
     print("starting")
 
-    if (yield "step0"):
+    if not ckpt.save_checkpoint_and_call_log("step0"):
         print("Resuming before step0")
 
     step0()
 
-    if (yield "step1"):
+    if not ckpt.save_checkpoint_and_call_log("step1"):
         print("Resuming before step1")
 
     step1()
 
-    if (yield "step2"):
+    if not ckpt.save_checkpoint_and_call_log("step2"):
         print("Resuming before step2")
 
     step2()
@@ -43,7 +42,15 @@ def processing():
 
 
 def main():
-    resume_and_save_checkpoints(processing(), [__file__])
+    logging.basicConfig()
+    logging.getLogger("function_checkpointing").setLevel(logging.DEBUG)
+    logging.getLogger("function_checkpointing.save_restore").setLevel(logging.DEBUG)
+    logging.root.setLevel(logging.DEBUG)
+
+    r = ckpt.resume_from_last_unchanged_checkpoint()
+    if isinstance(r, ckpt.CheckpointNotFound):
+        ckpt.start_call_tracing([__file__])
+        processing()
 
 
 if __name__ == "__main__":
