@@ -37,6 +37,9 @@ cdef extern from "genobject.h":
         PyObject *gi_qualname
         # ...
 
+cdef extern from "opcode.h":
+    cdef int EXCEPT_HANDLER        # #defined as an integer
+
 cdef extern from "frameobject.h":
     ctypedef struct PyTryBlock:
         int b_type                 # what kind of block this is

@@ -118,7 +118,7 @@ def resume_from_last_unchanged_checkpoint():
     """
     trace_fname = _change_point()
     if not trace_fname:
-        return CheckpointNotFound()
+        raise CheckpointNotFound()
 
     checkpoint_fname = checkpoint_from_trace(trace_fname)
     log.info("Restoring from checkpoint %s", checkpoint_fname)

@@ -21,7 +21,7 @@ def step2():
 
 
 def processing():
-    print("starting")
+    print("starting processing")
 
     if not ckpt.save_checkpoint_and_call_log("step0"):
         print("Resuming before step0")
@@ -47,8 +47,11 @@ def main():
     logging.getLogger("function_checkpointing.save_restore").setLevel(logging.DEBUG)
     logging.root.setLevel(logging.DEBUG)
 
-    r = ckpt.resume_from_last_unchanged_checkpoint()
-    if isinstance(r, ckpt.CheckpointNotFound):
+    try:
+        ckpt.resume_from_last_unchanged_checkpoint()
+        return
+    except ckpt.CheckpointNotFound:
+        print('Starting from scratch')
         ckpt.start_call_tracing([__file__])
         processing()
 

@@ -1,4 +1,4 @@
-"""Illustrate snapshotting a function and restarting it from an arbitrary place.
+"""Illustrate throwing an exception during restore.
 """
 
 import copy
@@ -68,8 +68,8 @@ def main():
     print("---Run processing to completion, saving checkpoints---")
     try:
         processing(a=2, b=3)
-    except:
-        print('Caught from processing')
+    except Exception as e:
+        print('Caught', e) 
 
     if len(checkpoints) == 4:
         print("---There are 4 checkpoints. Fastforward to 2nd checkpont---")
@@ -80,4 +80,6 @@ def main():
 
     print('EXITING MAIN')
 
-main()
+
+if __name__ == '__main__':
+    main()

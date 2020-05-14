@@ -56,12 +56,25 @@ cdef object snapshot_frame(PyFrameObject *frame, int child_frame_arg_count):
                 f" {call_instr.opname}. Here is the function:\n"
                 + bytecode.dis())
 
-    # Save a copy of the stack using the above guess. Convent NULL pointers to
-    # objects to a Python object sentinel value.
+    for bi in range(frame.f_iblock):
+        b = frame.f_blockstack[bi]
+        if b.b_type == EXCEPT_HANDLER:
+            # The frame called us from the middle of an exception handler block.
+            # There are 3 more items on the stack than what the above assumes,
+            # corresponding to the exception triplet.
+            stack_size += 3
+        else:
+            log.warn('Encountered unknown block type %d. Things might break.', b.b_type)
+
+    # Save a copy of the stack using the above guess. Convert NULL pointers to
+    # a Python object sentinel value.
     stack_content = [
             <object>frame.f_localsplus[i] if frame.f_localsplus[i] else NULLObject
             for i in range(stack_size)
         ]
+
+    if frame.f_iblock:
+        print(stack_content)
 
     try_block_stack = [
             frame.f_blockstack[i] for i in range(frame.f_iblock)
@@ -156,14 +169,12 @@ cdef object pyeval_fast_forward(PyFrameObject *frame, int exc):
     # Temporarily disable calling ourselves while we restore the frame. This
     # lets us call Python functions in restore_frame()
     PyThreadState_Get().interp.eval_frame = _PyEval_EvalFrameDefault
-    log.debug('Disabled pyeval_fast_forward to restore a frame')
-
     restore_frame(frame, jump_stack.pop())
 
-    log.debug('Re-enabled pyeval_fast_forward')
     PyThreadState_Get().interp.eval_frame = <_PyFrameEvalFunction*> pyeval_fast_forward
 
-    return _PyEval_EvalFrameDefault(frame, exc)
+    r = _PyEval_EvalFrameDefault(frame, exc)
+    log.debug('finished evaluating %s', <object> frame.f_code)
 
 
 def jump(saved_frames: List[SavedStackFrame]):
