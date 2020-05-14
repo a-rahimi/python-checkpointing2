@@ -17,7 +17,7 @@ def hash_code(f_code) -> bytes:
   return h.digest()
 
 
-cdef PyObject* pyeval_log_funcall_entry(PyFrameObject *frame, int exc):
+cdef object pyeval_log_funcall_entry(PyFrameObject *frame, int exc):
   frame_obj = <object> frame
   cdef PyThreadState *state = PyThreadState_Get()
 

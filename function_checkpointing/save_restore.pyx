@@ -4,7 +4,7 @@ import logging
 
 from function_checkpointing.jump cimport *
 
-SavedStackFrame = Tuple[int, List, bytes]
+SavedStackFrame = Tuple[int, List, bytes, List]
 
 class NULLObject(object):
     pass
@@ -63,10 +63,15 @@ cdef object snapshot_frame(PyFrameObject *frame, int child_frame_arg_count):
             for i in range(stack_size)
         ]
 
+    try_block_stack = [
+            frame.f_blockstack[i] for i in range(frame.f_iblock)
+            ]
+
     saved_frame = (
             <object> frame.f_lasti,
             stack_content,
-            <object> frame.f_code.co_code
+            <object> frame.f_code.co_code,
+            try_block_stack,
             )
 
     return saved_frame
@@ -86,14 +91,14 @@ def save_jump() -> List[SavedStackFrame]:
     """
     saved_stack: List[SavedStackFrame] = []
 
-    if PyThreadState_Get().interp.eval_frame == pyeval_fast_forward:
+    if PyThreadState_Get().interp.eval_frame == <_PyFrameEvalFunction*>pyeval_fast_forward:
         PyThreadState_Get().interp.eval_frame = _PyEval_EvalFrameDefault
         log.debug('save_jump In the middle of a resume. Not saving.')
         return []
 
     cdef PyFrameObject *frame = PyEval_GetFrame()
     cdef int child_frame_arg_count = 0  # initially, the argcount of save_jump()
-    while frame.f_back:
+    while frame:
         saved_stack.append(snapshot_frame(frame, child_frame_arg_count))
         child_frame_arg_count = frame.f_code.co_argcount
         frame = frame.f_back
@@ -101,16 +106,16 @@ def save_jump() -> List[SavedStackFrame]:
     return saved_stack
 
 
-cdef PyObject *restore_frame(PyFrameObject *frame, saved_frame: SavedStackFrame):
+cdef object restore_frame(PyFrameObject *frame, saved_frame: SavedStackFrame):
     """Restore the ephemeral state of a frame from the saved state.
 
     Copies the frame's instruction pointer and stack content from saved_frame
     to the frame object.
     """
     frame_obj = <object> frame
-    saved_f_lasti, saved_stack_content, saved_code = saved_frame
+    saved_f_lasti, saved_stack_content, saved_code, try_block_stack = saved_frame
 
-    log.debug('Restoring frame %s', frame_obj)
+    log.debug('Restoring frame %s', frame_obj.f_code)
 
     if frame_obj.f_code.co_code != saved_code:
         raise RuntimeError('Trying to restore frame from wrong snapshot:'
@@ -137,11 +142,15 @@ cdef PyObject *restore_frame(PyFrameObject *frame, saved_frame: SavedStackFrame)
 
     frame.f_stacktop = frame.f_localsplus + i
 
+    # Restore the try blocks
+    frame.f_iblock = len(try_block_stack)
+    for i in range(frame.f_iblock):
+        frame.f_blockstack[i] = try_block_stack[i]
 
 jump_stack = []
 
 
-cdef PyObject* pyeval_fast_forward(PyFrameObject *frame, int exc):
+cdef object pyeval_fast_forward(PyFrameObject *frame, int exc):
     global jump_stack
 
     # Temporarily disable calling ourselves while we restore the frame. This
@@ -152,7 +161,7 @@ cdef PyObject* pyeval_fast_forward(PyFrameObject *frame, int exc):
     restore_frame(frame, jump_stack.pop())
 
     log.debug('Re-enabled pyeval_fast_forward')
-    PyThreadState_Get().interp.eval_frame = pyeval_fast_forward
+    PyThreadState_Get().interp.eval_frame = <_PyFrameEvalFunction*> pyeval_fast_forward
 
     return _PyEval_EvalFrameDefault(frame, exc)
 
@@ -173,11 +182,11 @@ def jump(saved_frames: List[SavedStackFrame]):
     jump_stack.clear()
     jump_stack.extend(list(saved_frames))
 
-    cdef PyFrameObject *f = PyEval_GetFrame()
-    cdef PyFrameObject *top_frame = f
-    while f.f_back:
-        top_frame = f
-        f = f.f_back
+    cdef PyFrameObject *top_frame = PyEval_GetFrame()
+    while top_frame.f_back:
+        top_frame = top_frame.f_back
 
-    PyThreadState_Get().interp.eval_frame = pyeval_fast_forward
-    return <object>pyeval_fast_forward(top_frame, 0)
+    log.debug('top frame for resume: %s', <object>top_frame.f_code)
+    PyThreadState_Get().interp.eval_frame = <_PyFrameEvalFunction*>pyeval_fast_forward
+
+    return pyeval_fast_forward(top_frame, 0)

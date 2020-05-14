@@ -23,7 +23,7 @@ def subroutine(a):
     print("entering subroutine. a=%d" % a)
     if not save_checkpoint():
         print('Resuming from subroutine')
-        raise Exception()
+        raise Exception('resume exception')
     print("leaving subroutine. a=%d" % a)
     return 100
 
@@ -62,17 +62,22 @@ def processing(a, b):
 
 def main():
     logging.basicConfig()
-    logging.getLogger("function_checkpointing.save_restore").setLevel(logging.DEBUG)
+    logging.getLogger("function_checkpointing.save_restore").setLevel(logging.WARN)
     logging.root.setLevel(logging.DEBUG)
 
     print("---Run processing to completion, saving checkpoints---")
-    processing(a=2, b=3)
+    try:
+        processing(a=2, b=3)
+    except:
+        print('Caught from processing')
 
     if len(checkpoints) == 4:
         print("---There are 4 checkpoints. Fastforward to 2nd checkpont---")
         save_restore.jump(checkpoints[1])
+        print('<save_restore.jump(checkpoints[1])')
     else:
         print("---There are only %d checkpoints now---" % len(checkpoints))
 
+    print('EXITING MAIN')
 
 main()
