@@ -56,13 +56,19 @@ cdef object snapshot_frame(PyFrameObject *frame, int child_frame_arg_count):
                 f" {call_instr.opname}. Here is the function:\n"
                 + bytecode.dis())
 
+    # When we're called through a "block", there can be more items on the stack
+    # than what the above heuristic expects. For example, if we were called in the
+    # middle of an exception handler, we know there are 3 more items on the stack
+    # corresponding to the exception triplet.
+    # Account for these various blocks.
     for bi in range(frame.f_iblock):
         b = frame.f_blockstack[bi]
         if b.b_type == EXCEPT_HANDLER:
-            # The frame called us from the middle of an exception handler block.
-            # There are 3 more items on the stack than what the above assumes,
-            # corresponding to the exception triplet.
+            # Account for the exception triplet on the stack
             stack_size += 3
+        if b.b_type == SETUP_LOOP:
+            # Account for the iterator on the stack
+            stack_size += 1
         else:
             log.warn('Encountered unknown block type %d. Things might break.', b.b_type)
 
@@ -73,8 +79,8 @@ cdef object snapshot_frame(PyFrameObject *frame, int child_frame_arg_count):
             for i in range(stack_size)
         ]
 
-    if frame.f_iblock:
-        print(stack_content)
+    #if frame.f_iblock:
+    #   print(stack_content)
 
     try_block_stack = [
             frame.f_blockstack[i] for i in range(frame.f_iblock)

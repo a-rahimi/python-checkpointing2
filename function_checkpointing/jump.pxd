@@ -39,6 +39,7 @@ cdef extern from "genobject.h":
 
 cdef extern from "opcode.h":
     cdef int EXCEPT_HANDLER        # #defined as an integer
+    cdef int SETUP_LOOP            # #defined as an integer
 
 cdef extern from "frameobject.h":
     ctypedef struct PyTryBlock:
