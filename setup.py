@@ -11,5 +11,5 @@ setup(
     ),
     packages=["function_checkpointing"],
     requires=["Cython"],
-    python_requires=">=3.6",
+    python_requires=">=3.6, <=3.7",
 )
