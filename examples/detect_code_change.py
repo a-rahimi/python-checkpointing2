@@ -49,7 +49,6 @@ def main():
 
     try:
         ckpt.resume_from_last_unchanged_checkpoint()
-        return
     except ckpt.CheckpointNotFound:
         print('Starting from scratch')
         ckpt.start_call_tracing([__file__])

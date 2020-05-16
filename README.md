@@ -1,218 +1,269 @@
-# Checkpointing Data Processing Programs
+# Checkpointing Python Programs
+
+**TL;DR:** Here's an implementation of setjmp() and longjmp() for Python 3.6+. With
+twist and Python flavors.
 
 If you write data processing pipelines that take hours to run on your desktop,
-you live in fear of crashes. A crash a few hours into your pipeline means you
-have to wait that much longer before you get to the next experiment. For big
-production pipelines, the solution is to use an industrial strength workflow
-manager. For smaller pipelines that run on your desktop, the typical solution
-is invest in some hand-woven checkpointing code.
+you live in fear of crashes. Maybe you've invested in some hand-woven
+checkpointing code.
 
-This package helps you checkpoint your pipeline's work. When your pipeline
-crashes, this package helps you restart it from the last checkpoint.  As a
-bonus, if you modify your code to fix the crash, this package starts from a
-known good checkpoint that does not get affected by the code change.
+This package helps you checkpoint your pipeline's work somewhat automatically.
+When your pipeline crashes, this package helps you restart it from the last
+checkpoint.  As a bonus, if you modify your code to fix the crash, this package
+starts from a known good checkpoint that does not get affected by the code
+change.
 
-Ideally, your code might look like this:
+Your code ends up looking like this:
 ```python
-import snapshotting
+import function_checkpointing as ckpt
 
-def processing_idealized():
-  ... do step 1...  
+def sub_stage1():
+   for step in range(5):
+       ... do some work...
+
+       # Snapshot the state of this function to disk
+       ckpt.save_checkpoint(f"snapshot sub_stage1 {step}")  
+
+def processing():
+  sub_stage1()   # Do some heavy lifting
+
+  ... do some more work...
 
    # Snapshot the state of this function to disk
-  snapshotting.save_or_restore("snapshot 1")  
+  ckpt.save_checkpoint("snapshot 2")  
 
-  ... do step 2...
-  
-   # Snapshot the state of this function to disk
-  snapshotting.save_or_restore("snapshot 2")  
-
-  ... do step 3...
+  ... do some more work...
 ```
 
-The function save_or_restore would checkpoint the entire state of your program
-where it's called. When your program gets restored from this checkpoint, your
-program would appear to just be returning from a call to this function.
+You can drop a checkpoint anywhere in your code. After your code resumes,
+you don't need to implement logic to fast-forward your code's state to the
+checkpoint. All that happens for your automatically.
 
-Under this package, you write your processing pipeline as a Python
-generator.  Each time your pipeline calls "yield", your generator's state gets
-snapshotted to disk. The next time your pipeline starts, your generator resumes
-from a known good checkpoint.
+The function `save_checkpont` snapshots to disk the state of your program as of
+when it's called to disk. When your program gets restored from this checkpoint,
+it appears to just be returning from a call `save_checkpoint` with a return
+value of `[]`.
 
 Before we get too far, a disclaimer: It's nearly impossible to automatically
 fully checkpoint a program.  That would require checkpointing the state of the
 resources your program depends on too, like the disk files and database servers
-it accesses. That becomes very hard unless all these external resources provide
-a standardized snapshotting mechanism.
+it accesses, and the state of the GPU. That becomes very hard unless all these
+external resources provide a standardized snapshotting mechanism. You may need
+to store some of the state manually. This particular package also has some
+intentional design [limitations](#Limitations).
 
 
-## Saving and Restoring the State of your Function
+# The semantics of checkpointing
 
-Your main processing pipline would look like this:
+The main functions are `save_checkpoint` and `resume_from_checkpoint`.  Under
+the hood, these functions write and read from pickle files, and call functions
+named `save_jump` `jump` respectively.  The functions `save_jump` and `jump`
+are useful in their own right. If you grok them, you grok this package.
+
+
+# `save_jump`
+
+The function `save_jump` takes no argument. It packages up and returns the
+chain of frames that led up to this call. This package contains the local
+variables, the Python bytecode interpreter stack, and the bytecode instruction
+pointer at the location where `save_jump` was called. It also includes this
+information for the parent frame that `save_jump`, and its caller's frame, all
+the way up to the topmost frame.  It then returns this stashed stack frame as a
+Python object you can inspect (and modify if you wish).
+
+But there's a twist: `save_jump` can return twice. The above is what happens
+when you're taking a snapshot.  But `save_jump` can also return when you're
+restoring a snapshot. In that case, the return value of `save_jump` is an empty
+list. You can use this to check if your program is being restored or if it's
+checkpointing:
+
 ```python
-def processing():
-  ... do step 1...
-  yield "step1"    # Snapshot the state of this function to disk
-  ... do step 2...
-  yield "step2"    # Snapshot the state of this function to disk
-  ... do step 3...
+c = ckpt.save_jump()
+if not c:
+    # We're resuming from a checkpoint. Reopen connection to the database.
+    db = connect_to_database()
 ```
 
-To run the generator and checkpoint it along the way, you can call
+The semanetics of `save_jump` are similar to those of the POSIX setjmp() function.
+
+
+# `jump`
+
+`jump` takes one argument: a snapshot returned by `save_jump`. It restores the
+state of the frame stack to the state that `save_jump` captured.
+
+But instead of rooting the stack frames from the topmost frame, it does this
+under its own stack frame. That means when the topmost stackframe that
+originated the sequence of calls that culminated in `save_jump` finishes,
+control returns to the stack frame that called `jump`, and jump.
+
+This is an important distinction with the POSIX `longjmp()` function, which
+never returns.
+
+Practically, this means the function foo() below returns twice, an unusual concept
+in most programming languages:
+
 ```python
-save_checkpoints(processing())
+def foo():
+   c = ckpt.save_jump()
+   if c:
+      print('saved checkpoint')
+      ckpt.jump(c)
+   else:
+      print('restored from checkpoint')
+
+   print('foo returns')
 ```
 
-To restore from a specific checkpoint, you can call
-```python
-resume_from_checkpoint(processing(), '__checkpoint__/step2')
+This function prints:
 ```
+saved checkpoint
+restored from checkpoint
+foo returns
+foo returns
+````
 
-This examle gives a flavor of what's possible with saving the state of
-generators, but this package goes a little further.
+To appreciate this, let's call this function from another function:
+```python
+def caller():
+    print('caller->foo')
+    foo()
+    print('foo->caller')
+```
+Calling this function prints
+```
+caller->foo
+saved checkpoint
+restored from checkpoint
+foo returns
+foo->caller
+foo returns
+foo->caller
+````
+It looks like world has split in two at the point of `save_jump`. But all that's
+happening is that `jump` is recreating the callchain leading to `save_jump` by
+navigating the interpreter through the saved frames.
+
+Here's an illustration of what's happening. Calling caller results in a call to
+foo, which results in a call to save_jump. This diagram captures the snapshot
+captured in `c`:
+
+[](images/snapshot.png)
+
+As execution proceed down foo, we reach a call to `jump`. Jump reroots the
+callchain captured in `c` under itself and fast forwards the Python interprter
+to the leaf frame:
+
+[](images/jump.png)
+The last frame, foo, continues executing until it returns. Then `caller`
+finishes executing, then the top level module executes, and finaly, the `jump`
+function returns. We have reach the end of foo, so foo returns. Notice that foo
+returned twice.
+
+If you're not enjoying this mindbending fact, you can just terminate your program
+after jump rturns by calling `sys.exit` immediately after `jump`.
 
 
-## Selecting a Checkpoint by Detecting Changes in your Code
+## Is this like `yield` and Python generators?
+
+There is a superficial resemblence between `save_jump` and the Python `yield`
+statement: both stash the current stack frame. But then yield forces the
+interpreter to exit the stack frame and return control to the caller's stack
+frame, essentially acting as `return`. `save_jump`, on the other hand, saves
+the entire chain of stack frames, and allows execution to remain in the current
+frame. `save_jump` appears as a normal function call and not at all like
+`return`.
+
+Similarly, there is a superficial resemblence between `jump` and calling a
+generator's `send` method. Calling `send` resumes the generator frame's
+execution at the last `yield`.  But `jump` does more than that: it resumes
+execution of the entire stack chain leading up to `save_jump`, not just the
+single stack frame where `save_jump` was called.
+
+My [earlier attempt at an automatic
+checkpointing](/a-rahimi/python-checkpointing) library used the `yield`.  The
+practical limitation with generators is that you can only snapshot one function
+(the generator), and not the call chain that resulted in the generator being
+called. That meant that my previous attempt, if you wanted to take snapshots at
+multiple layers of the call chain, you'd have to use `yield from`, which imposed
+an inconvenient structure on your code.
+
+
+# Bonus: Selecting a Checkpoint by Detecting Changes in your Code
 
 Normally, you'd want to resume your program from the latest checkpoint it
-created before it crashed.  But typically after a crash, you modify your code
-to fix the problem. Starting from the latest checkpoint might mean you don't
-take advantage of that code change and you'll encounter the same crash.
+created before it crashed. But after a crash you might modify your code to fix
+the problem that caused the crash. In such cases,  instead of resuming from the
+latest checkpoint, this package helps you identify the latest checkpoint that
+incurred no code change, and to resume from that checkpoint.
 
-Instead of resuming from the latest checkpoint, this package helps you identify
-the latest checkpoint that has incurred no code change, and to resume from that
-checkpoint.
+To detect where your code has changed, the package provides a run-time profiler
+that logs the function calls in your code. The call log is stored to disk along
+with each checkpoint.  When it's time to restore the state of the program, we
+identify the latest checkpoint whose call log involves no calls to any modified
+function.
 
-To detect where your code has changed, the package provides a fast run-time
-call profiler (benchmarks forthcoming). The call profiler logs the important
-function calls in your code (the ones that happen in the modules you specify),
-along with a hash of the function's code.  Each checkpoint also stores the
-function calls that were made since the last checkpoint.  When it's time to
-restore the state of the program, we inspect the call log of the checkpoints in
-chronological order. The function hash for each function in the call log is
-compared against its hash in the currently running program to check if the
-function hash has become stale. The program resumes from the latest checkpoint
-with a call log that has no stale hash.
+A few functions give you control over this automatic restart mechanism.
+* `start_call_tracing` turns on the call tracer.
+*  `save_checkpoint_and_call_log` is a variant of `save_checkpoint` that stores the call log along with the checkpoint.
+*  `resume_from_last_unchanged_checkpoint` identifies and loads the
+relevant checkpoint.
 
-This might sound complicated, but the API is simple. See
-[examples/detect_code_change.py](examples/detect_code_change.py) for an
-example. As before, all the work happens in a function called `processing()`,
-and main() calls this function with a wrapper as:
-```python
-def main():
-  resume_and_save_checkpoints(processing(), [__file__])
-```
-
-The second argument to `resume_and_save_checkpoints` specifies the list of
-modules whose calls are logged.
+See [examples/detect_code_change.py](examples/detect_code_change.py) for an
+example.
 
 
-## Restoring State by Hand
+# Under the Hood
 
-Restoring a checkpoint restores the state of the generator that drives your
-pipeline.  This includes the generator's local variables, the Python
-instruction pointer, and the Python stack.  But external objects like file
-objects aren't restored correctly. The burden of restoring these
-difficult-to-restore objects falls on you.
+Saving the Python interpreter state is tricky. The CPython interpreter has
+effectively two stacks: the interpeter stack, which the bytecode instructions
+operate on, and the C stack, which the bytecode interpreter uses to keep track
+of its own state. We manipulate the state of both the CPython interpert stack
+and the C stack.
 
-The yield call in your processing pipeline evaluates to True whenever your code
-is restored from its corresponding checkpoint. Checking the value of this yield
-tells you when to restore the difficult to restore state.
+In my previous attempt, I documented [why this is
+hard](https://github.com/a-rahimi/python-checkpointing#failed-attempts).  The
+chief problem is that obtaining the top of the CPython stack frame seems
+impossible ([there's also this excellent answer from
+Stackoverflow](https://stackoverflow.com/a/44443331/711585)). This package
+solves this problem by relying on some known facts about the depth of the
+python stack: When a function is called, its arguments are on the stack. We can
+inspect the number of arguments of the function from its code object. But
+depending on the kind of funciton call (a method call, a call with kwargs,
+etc), the stack can include the instance that owns the method, or a tuple of
+variables names. We account for these situations by inspect the CALL bytecode
+that resulted in the call.  More object can be on the stack: if an exceptoin is
+being handled or the caller is in the middle of a loop, the stack contains
+additional items: the exception triplet, and the loop iterator. We count the
+level of nesting of exceptions and loops to count these items. This heuristic
+changes across Python versions.
 
-A processing loop that depends on an external file might use this like so:
-```python
-def processing():
-  f = open('file.dat')
-  ... processs file ...
+To manipulate the C stack, this package forces nested calls to
+`_PyEval_EvalFrameDefault`, the CPython bytcode interpreterer responsible for
+executing a frame. Each call fast-forwards the execution in a frame by setting
+the frame instruction counter `f_lasti` to that specified in the checkpoint.
+These nested calls to `_PyEval_EvalFrameDefault` cause the C stack to attain
+the state it had when `save_jump` was called.
 
-  if (yield "step2"):   # Save a checkpoint
-    # We're being restored from a checkpoint here. Reopen the file
-    f = open('file.dat')
+# Limitations
 
-  ... process file some more...
-```
+* Requires Python 3.6: I rely on
+  [PEP523](https://www.python.org/dev/peps/pep-0523/), which is only available
+  in 3.6+.
 
+* Only tested in Python 3.7. There's no fundamental limitation here. That just
+  happens to be what I have.
 
-# How it Works Under the Hood
+* Does not store global variables: Again, no fundamental limitation here. I
+  think save globals is both relatively straightforward and simultaneously not
+  particular useful, so it's not yet implemented (it might make sense to
+  implement it as an auxiliary package to keep this one simple).
 
-I wasn't initially trying to checkpoint generators. I was trying to checkpoint
-normal functions.
-
-## Failed Attempts
-
-I investigated several ideas before I landed on the above implementation. Here
-were the lowlights:
-
-1) I tried saving and restoring
-[PyFrameObjects](https://github.com/python/cpython/blob/703647732359200c54f1d2e695cc3a06b9a96c9a/Include/cpython/frameobject.h#L17).
-This almost works, except for one field: `f_stacktop`. The problem is that
-[`_PyEval_EvalFrameDefault`](https://github.com/python/cpython/blob/6d86a2331e6b64a2ae80c1a21f81baa5a71ac594/Python/ceval.c#L880),
-the interpreter's bytecode interpreter, stores the top of the stack as a [local
-C
-variabe](https://github.com/python/cpython/blob/6d86a2331e6b64a2ae80c1a21f81baa5a71ac594/Python/ceval.c#L887).
-It spills it to the outside on only two occasions: [line-level
-tracing](https://github.com/python/cpython/blob/6d86a2331e6b64a2ae80c1a21f81baa5a71ac594/Python/ceval.c#L1382)
-(which is too slow to enable for all programs), and the [YIELD bytecode
-instruction](https://github.com/python/cpython/blob/6d86a2331e6b64a2ae80c1a21f81baa5a71ac594/Python/ceval.c#L2204)
-(which is what I ended up using). I tried a variety of sneaky ways to deduce
-the top of the stack in other ways. For example, I tried examining the chain of
-frames, but each frame ends up allocating a fresh stack. I also tried catching
-transition between frames when a function gets called. The top of the stack is
-passed around through several layers of [function
-calls](https://github.com/python/cpython/blob/6d86a2331e6b64a2ae80c1a21f81baa5a71ac594/Python/ceval.c#L3480)
-before the next frame is created, but I couldn't steal it from the interpreter.
-
-2) Since the YIELD bytecode instruction causes the interpreter to [save the
-stack
-top](https://github.com/python/cpython/blob/6d86a2331e6b64a2ae80c1a21f81baa5a71ac594/Python/ceval.c#L2204),
-I tried various ways to inject a YIELD instruction into the bytecode to trick
-the interpreter to save its stack top. The most promising strategy seemed to be
-to dynamically modify the bytecode to inject a YIELD instruction, but the YIELD
-instruction has the undesirable side effect of exiting the current frame. I
-considered working around this by making the frame's `f_back` pointer point to
-itself to prevent the frame from getting popped, but that comes with its own
-problems.
-
-3) I tried ignoring `f_stacktop` all together and setting it to the bottom of
-the stack, right above the local variables. This surprising worked on all the test
-code I used. It assumes that the Python stack has no values on it before the
-yield, which happened to be true for most simple code. But it wasn't too hard
-to write code that violates this assumption.
-
-4) Longjump/setjump the interpreter state. I considered snapshotting the state
-of the CPython interpreter itself using longjmp and set setjmp. This seemed
-like a great way solve this problem, except this state can't be serialized
-between runs of CPython. Once the interpreter exits, the parts the snapshot
-that refers to dynamically allocated data or data on the stack (almost all of
-the state) is no longer correct.
-
-
-## Surgery on Checkpoints
-
-Here's what I ended up doing. When you call the generator's `__next__` method,
-the generator advances until its next yield, where it updates a
-[snapshot](https://github.com/python/cpython/blob/ae00a5a88534fd45939f86c12e038da9fa6f9ed6/Include/genobject.h#L31)
-of itself and returns it to its caller.  This generator snapshot can be
-manipulated. You can read its fields, save copies of it as a Python object,
-save it to disk, and restore it. However, these operations can't happen in
-Python. They have to happen in C. The Cython files in this package do just
-that.
-
-Consider these two lines from [examples/rewgen.py](examples/rewgen.py):
-```python
-      gen = processing()
-      checkpoints = [copy.deepcopy(gen_surgery.save_generator_state(gen)) for _ in gen]
-```
-The list comprehension iterates through the generator, saving its state as a list of
-checkpoints.
-
-You can resume the checkpoint from any of these states by re-creating the generator
-and resetting its state by calling
-```python
-      gen = processing()
-      gen_surgery.restore_generator(gen, checkpoints[1])
-```
-You can then iterate through it as before, excep that it will execute on from checkpoint 1 instead of its normal start.
+* Might crash. Your code might crash this package. I'll fix the package if you
+  send me a bug report. Instead of developing the perfect checkpointer with
+  exhaustive test cases, I built for myself the simplest checkpointer, and then
+  refine it as my use case grows. If the package does something weird for you, tell
+  me and I'll work on ti.
 
 
 # Acknowledgement
