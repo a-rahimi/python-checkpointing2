@@ -4,6 +4,7 @@ Run this code first to generate the call graph and breakpoints. Then modify one
 of the functions step0, step1, or step2. When you rerun the code, it will
 resume from whichever function you modified.
 """
+
 import logging
 import function_checkpointing as ckpt
 
@@ -50,7 +51,7 @@ def main():
     try:
         ckpt.resume_from_last_unchanged_checkpoint()
     except ckpt.CheckpointNotFound:
-        print('Starting from scratch')
+        print("Starting from scratch")
         ckpt.start_call_tracing([__file__])
         processing()
 

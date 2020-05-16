@@ -22,8 +22,8 @@ def save_checkpoint():
 def subroutine(a):
     print("entering subroutine. a=%d" % a)
     if not save_checkpoint():
-        print('Resuming from subroutine')
-        raise Exception('resume exception')
+        print("Resuming from subroutine")
+        raise Exception("resume exception")
     print("leaving subroutine. a=%d" % a)
     return 100
 
@@ -35,7 +35,7 @@ def processing(a, b):
     print(step, "a=", a, "lst=", lst)
 
     if not save_checkpoint():
-        print('Resuming from step1')
+        print("Resuming from step1")
 
     d = subroutine(a)
 
@@ -46,7 +46,7 @@ def processing(a, b):
     print(step, "a=", a, "lst=", lst)
 
     if not save_checkpoint():
-        print('Resuming from step2')
+        print("Resuming from step2")
 
     step = "step3"
     c = 2
@@ -55,7 +55,7 @@ def processing(a, b):
     print(step, "a=", a, "lst=", lst)
 
     if not save_checkpoint():
-        print('Resuming from step3')
+        print("Resuming from step3")
 
     print("end")
 
@@ -69,17 +69,17 @@ def main():
     try:
         processing(a=2, b=3)
     except Exception as e:
-        print('Caught', e) 
+        print("Caught", e)
 
     if len(checkpoints) == 4:
         print("---There are 4 checkpoints. Fastforward to 2nd checkpont---")
         save_restore.jump(checkpoints[1])
-        print('<save_restore.jump(checkpoints[1])')
+        print("<save_restore.jump(checkpoints[1])")
     else:
         print("---There are only %d checkpoints now---" % len(checkpoints))
 
-    print('EXITING MAIN')
+    print("EXITING MAIN")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
