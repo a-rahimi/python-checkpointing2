@@ -58,6 +58,8 @@ external resources provide a standardized snapshotting mechanism. You may need
 to store some of the state manually. This particular package also has some
 intentional design [limitations](#Limitations).
 
+<img src="images/snapshot.gif" width="500">
+
 
 # How it Works: Python versions of longjmp and setjmp under the hood
 
