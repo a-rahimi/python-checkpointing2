@@ -12,8 +12,11 @@ def main():
     i = 0
     while True:
         print(i)
-        time.sleep(1)
         save_checkpoint("loop")
         i += 1
 
-main()
+        if i > 5:
+            break
+
+if __name__ == "__main__":
+    main()

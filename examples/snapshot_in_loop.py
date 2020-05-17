@@ -8,7 +8,6 @@ import function_checkpointing.save_restore as save_restore
 
 checkpoints = []
 
-
 def save_checkpoint():
     ckpt = save_restore.save_jump()
     if ckpt:
@@ -20,10 +19,8 @@ def save_checkpoint():
 
 
 def subroutine(a):
-    print("entering subroutine. a=%d" % a)
     if not save_checkpoint():
         print("Resuming from subroutine")
-    print("leaving subroutine. a=%d" % a)
     return 100
 
 
