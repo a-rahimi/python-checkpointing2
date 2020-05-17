@@ -28,19 +28,18 @@ cdef object snapshot_frame(PyFrameObject *frame, int child_frame_arg_count):
     # to our child frame.
     stack_size = frame.f_valuestack - frame.f_localsplus + child_frame_arg_count
 
-    # Disassemble the currently call instruction. Add the number of arguments
+    # Disassemble the current call instruction. Add the number of arguments
     # it needed to have on the stack. To do this, disassemble the frame's code
     # object and jump to the index of the last instruction execute. This is a
     # CALL instruction of some kind (CALL_FUNCTION, CALL_METHOD, etc) because
     # this frame was captured in the middle of a call to save_frame().
-    bytecode = dis.Bytecode(<object> frame.f_code, current_offset=frame.f_lasti)
-    instructions = iter(bytecode)
-    for _ in range(frame.f_lasti // 2):  # Fast forward to f_lasti.
-        next(instructions)
-    call_instr = next(instructions)
+    bytecode_instructions = list(
+            dis.Bytecode(<object> frame.f_code, current_offset=frame.f_lasti)
+            )
 
     # The arguments to the CALL_FUNCTION instruction or whatever instruction
     # caused the method call.
+    call_instr = bytecode_instructions[frame.f_lasti // 2]
     if call_instr.opname == 'CALL_FUNCTION':
         # +1 for the address of the function being called
         stack_size += 1
@@ -54,7 +53,7 @@ cdef object snapshot_frame(PyFrameObject *frame, int child_frame_arg_count):
     elif call_instr.opname:
         raise NotImplementedError("Don't know how to checkpoint around opcode"
                 f" {call_instr.opname}. Here is the function:\n"
-                + bytecode.dis())
+                + bytecode_instructions)
 
     # When we're called through a "block", there can be more items on the stack
     # than what the above heuristic expects. For example, if we were called in the
@@ -78,9 +77,6 @@ cdef object snapshot_frame(PyFrameObject *frame, int child_frame_arg_count):
             <object>frame.f_localsplus[i] if frame.f_localsplus[i] else NULLObject
             for i in range(stack_size)
         ]
-
-    #if frame.f_iblock:
-    #   print(stack_content)
 
     try_block_stack = [
             frame.f_blockstack[i] for i in range(frame.f_iblock)
