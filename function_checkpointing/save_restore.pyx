@@ -1,10 +1,15 @@
 from typing import Generator, List, Tuple, Sequence
+import collections
 import dis
 import logging
 
 from function_checkpointing.jump cimport *
 
-SavedStackFrame = Tuple[int, List, bytes, List]
+SavedStackFrame = collections.namedtuple(
+        'SavedStackFrame',
+        ('f_lasti', 'stack_content', 'co_code', 'try_block_stack'),
+        module=__name__
+        )
 
 class NULLObject(object):
     pass
@@ -109,7 +114,7 @@ cdef object snapshot_frame(PyFrameObject *frame, int child_frame_arg_count):
             frame.f_blockstack[i] for i in range(frame.f_iblock)
             ]
 
-    saved_frame = (
+    saved_frame = SavedStackFrame(
             <object> frame.f_lasti,
             stack_content,
             <object> frame.f_code.co_code,
@@ -155,25 +160,24 @@ cdef object restore_frame(PyFrameObject *frame, saved_frame: SavedStackFrame):
     to the frame object.
     """
     frame_obj = <object> frame
-    saved_f_lasti, saved_stack_content, saved_code, try_block_stack = saved_frame
 
     log.debug('Restoring frame %s', frame_obj.f_code)
 
-    if frame_obj.f_code.co_code != saved_code:
+    if frame_obj.f_code.co_code != saved_frame.co_code:
         raise RuntimeError('Trying to restore frame from wrong snapshot:'
                 f'\n   called_on.f_code.co_code: {frame_obj.f_code.co_code}'
-                f'\n   saved_code: {saved_code}')
+                f'\n   saved_code: {saved_frame.co_code}')
 
     # Fast forward the instruction pointer. f_lasti points to a CALL
     # instruction (a CALL_METHOD or CALL_FUNCTION or similar). The frame
     # evaluator starts executing at f_lasti+2, but in this case, we want it to
     # re-execute the call instruction to force it to recurse on itself. So
     # preemptively decrement f_lasti by 2.
-    frame.f_lasti = saved_f_lasti - 2
+    frame.f_lasti = saved_frame.f_lasti - 2
 
     # Restore the content of the stack.
     cdef int i = 0
-    for o in saved_stack_content:
+    for o in saved_frame.stack_content:
         if o == NULLObject:
             # Translate the sentinel value back to NULL.
             frame.f_localsplus[i] = NULL
@@ -185,9 +189,9 @@ cdef object restore_frame(PyFrameObject *frame, saved_frame: SavedStackFrame):
     frame.f_stacktop = frame.f_localsplus + i
 
     # Restore the try blocks
-    frame.f_iblock = len(try_block_stack)
+    frame.f_iblock = len(saved_frame.try_block_stack)
     for i in range(frame.f_iblock):
-        frame.f_blockstack[i] = try_block_stack[i]
+        frame.f_blockstack[i] = saved_frame.try_block_stack[i]
 
 jump_stack = []
 
