@@ -1,4 +1,4 @@
-from typing import Generator, List, Tuple
+from typing import Generator, List, Tuple, Sequence
 import dis
 import logging
 
@@ -10,6 +10,38 @@ class NULLObject(object):
     pass
 
 log = logging.getLogger(__name__)
+
+
+def loop_nesting_level(instructions: Sequence[dis.Instruction],
+        starting_from: int, ending_at: int = None) -> int:
+    """Count the level of nesting of for loops surrounding the given range of
+    instructions."""
+
+    if ending_at is None:
+        ending_at = starting_from
+
+    # Find the first backward jump after this range
+    while ending_at < len(instructions):
+        if instructions[ending_at].opcode == JUMP_ABSOLUTE:
+            break
+        ending_at += 1
+    else:
+        # No loop of any kind encloses the block
+        return 0
+
+    # The index into `instructions` this jumps to.
+    jump_target: int = instructions[ending_at].arg // 2
+
+
+    # If the jump encompasses the target block and it jumps to a FOR_ITER instruction,
+    # then this block is inside a for loop.
+    if jump_target < starting_from and instructions[jump_target].opcode == FOR_ITER:
+        # Now check if that for loop is itself inside another for loop.
+        return 1 + loop_nesting_level(instructions, jump_target - 1, ending_at + 1)
+
+    # This jump wasn't part of a for loop that enclosed us. But there might be
+    # jump instruction later that that encompasses this block.
+    return loop_nesting_level(instructions, starting_from, ending_at + 1)
 
 
 cdef object snapshot_frame(PyFrameObject *frame, int child_frame_arg_count):
@@ -55,21 +87,16 @@ cdef object snapshot_frame(PyFrameObject *frame, int child_frame_arg_count):
                 f" {call_instr.opname}. Here is the function:\n"
                 + bytecode_instructions)
 
-    # When we're called through a "block", there can be more items on the stack
-    # than what the above heuristic expects. For example, if we were called in the
-    # middle of an exception handler, we know there are 3 more items on the stack
-    # corresponding to the exception triplet.
-    # Account for these various blocks.
+    # If we're called from inside an exception handler, there are 3 items on the
+    # stack corresponding to the exception triplet. Add 3 for every exception
+    # handling block that encompasses us.
     for bi in range(frame.f_iblock):
-        b = frame.f_blockstack[bi]
-        if b.b_type == EXCEPT_HANDLER:
-            # Account for the exception triplet on the stack
+        if frame.f_blockstack[bi].b_type == EXCEPT_HANDLER:
             stack_size += 3
-        if b.b_type == SETUP_LOOP:
-            # Account for the iterator on the stack
-            stack_size += 1
-        else:
-            log.warn('Encountered unknown block type %d. Things might break.', b.b_type)
+
+    # Add one stack element for every for loop surrounding the call site. Each
+    # for loop pushes an iterator onto the stack.
+    stack_size += loop_nesting_level(bytecode_instructions, frame.f_lasti // 2)
 
     # Save a copy of the stack using the above guess. Convert NULL pointers to
     # a Python object sentinel value.

@@ -65,7 +65,7 @@ def main():
     logging.root.setLevel(logging.DEBUG)
 
     print("---Run processing to completion, saving checkpoints---")
-    for i in range(3):
+    for i in [10, 20, 30]:
         processing(a=2, b=i)
 
     if len(checkpoints) == 12:

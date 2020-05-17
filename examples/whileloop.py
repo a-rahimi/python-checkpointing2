@@ -1,4 +1,3 @@
-import itertools
 import time
 
 from function_checkpointing import save_checkpoint, resume_from_checkpoint
@@ -10,10 +9,11 @@ def main():
     except FileNotFoundError:
         pass
 
-    for i in itertools.count(0):
+    i = 0
+    while True:
         print(i)
         time.sleep(1)
         save_checkpoint("loop")
-
+        i += 1
 
 main()
