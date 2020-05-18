@@ -20,7 +20,7 @@ class TestExamples(unittest.TestCase):
         self.assertLinesEqual(expected_output, actual_output)
 
     def delete_checkpoints(self):
-        shutil.rmtree('__checkpoints__', ignore_errors=True)
+        shutil.rmtree("__checkpoints__", ignore_errors=True)
 
     def tearDown(self):
         self.delete_checkpoints()
@@ -67,7 +67,7 @@ EXITING MAIN
 
     def test_raise_during_restore(self):
         self.check_output(
-            ["python3", "../examples/raise_during_restore.py"], 
+            ["python3", "../examples/raise_during_restore.py"],
             """---Run processing to completion, saving checkpoints---
 step1 a= 2 lst= ['step1']
 entering subroutine. a=2
@@ -82,11 +82,13 @@ Caught resume exception
 ---There are only 0 checkpoints now---
 EXITING MAIN
 <save_restore.jump(checkpoints[1])
-EXITING MAIN""")
+EXITING MAIN""",
+        )
 
     def test_save_to_disk(self):
-        self.check_output(["python3", "../examples/save_to_disk.py"],
-                """Running to completion and dumping checkpoints
+        self.check_output(
+            ["python3", "../examples/save_to_disk.py"],
+            """Running to completion and dumping checkpoints
 step1 a= 2 lst= ['step1']
 entering subroutine. a=2
 leaving subroutine. a=2
@@ -95,26 +97,33 @@ step3 a= 8 lst= ['step1', 'step2', 'step3']
 end
 
 You can now re-run passing checkpoint filename to restart
-""")
-        self.check_output(["python3", "../examples/save_to_disk.py", "step2"],
-                """step3 a= 8 lst= ['step1', 'step2', 'step3']
+""",
+        )
+        self.check_output(
+            ["python3", "../examples/save_to_disk.py", "step2"],
+            """step3 a= 8 lst= ['step1', 'step2', 'step3']
 end
 
 You can now re-run passing checkpoint filename to restart
 Jump finished
-""")
+""",
+        )
 
     def test_while_loop(self):
-        self.check_output(["python3", "../examples/whileloop.py"],
-                """0
+        self.check_output(
+            ["python3", "../examples/whileloop.py"],
+            """0
 1
 2
 3
 4
-5""")
+5""",
+        )
 
     def test_varargs(self):
-        self.check_output(["python3", "../examples/varargs.py"],
-                """foo in 1 2 3 4
+        self.check_output(
+            ["python3", "../examples/varargs.py"],
+            """foo in 1 2 3 4
 foo out 1 2 3 4
-foo out 1 2 3 4""")
+foo out 1 2 3 4""",
+        )
