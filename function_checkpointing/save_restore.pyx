@@ -49,48 +49,15 @@ def loop_nesting_level(instructions: Sequence[dis.Instruction],
     return loop_nesting_level(instructions, starting_from, ending_at + 1)
 
 
-cdef object snapshot_frame(PyFrameObject *frame, int child_frame_arg_count):
+cdef object snapshot_frame(PyFrameObject *frame):
     log.debug('Saving frame %s(co_argcount=%d) last_i=%d',
         <object>frame.f_code.co_name,
         <object>frame.f_code.co_argcount,
         <object>frame.f_lasti)
 
-    if frame.f_code.co_kwonlyargcount:
-        raise NotImplementedError("Can't yet handle functions with kw arguments "
-                "in the call chain. Frame: " + str(<object>frame))
-
-    # Take a guess at the stack size.
-
-    # Add the local variables and the number of arguments we had to pass
-    # to our child frame.
-    stack_size = frame.f_valuestack - frame.f_localsplus + child_frame_arg_count
-
-    # Disassemble the current call instruction. Add the number of arguments
-    # it needed to have on the stack. To do this, disassemble the frame's code
-    # object and jump to the index of the last instruction execute. This is a
-    # CALL instruction of some kind (CALL_FUNCTION, CALL_METHOD, etc) because
-    # this frame was captured in the middle of a call to save_frame().
-    bytecode_instructions = list(
-            dis.Bytecode(<object> frame.f_code, current_offset=frame.f_lasti)
-            )
-
-    # The arguments to the CALL_FUNCTION instruction or whatever instruction
-    # caused the method call.
-    call_instr = bytecode_instructions[frame.f_lasti // 2]
-    if call_instr.opname == 'CALL_FUNCTION':
-        # +1 for the address of the function being called
-        stack_size += 1
-    elif call_instr.opname == 'CALL_METHOD':
-        # +1 for the address of the method, +1 for the object
-        stack_size += 2
-    elif call_instr.opname == 'CALL_FUNCTION_KW':
-        # +1 for the address of the function, +1 for the tuple containing
-        # the names of variables
-        stack_size += 2
-    elif call_instr.opname:
-        raise NotImplementedError("Don't know how to checkpoint around opcode"
-                f" {call_instr.opname}. Here is the function:\n"
-                + bytecode_instructions)
+    # The stack contains the the local variables, but we'll keep adding things
+    # to it below.
+    stack_size = frame.f_valuestack - frame.f_localsplus
 
     # If we're called from inside an exception handler, there are 3 items on the
     # stack corresponding to the exception triplet. Add 3 for every exception
@@ -99,9 +66,35 @@ cdef object snapshot_frame(PyFrameObject *frame, int child_frame_arg_count):
         if frame.f_blockstack[bi].b_type == EXCEPT_HANDLER:
             stack_size += 3
 
-    # Add one stack element for every for loop surrounding the call site. Each
-    # for loop pushes an iterator onto the stack.
+    # Disassemble the current call instruction.
+    bytecode_instructions = list(
+            dis.Bytecode(<object> frame.f_code, current_offset=frame.f_lasti)
+            )
+    call_instr = bytecode_instructions[frame.f_lasti // 2]
+
+    # Add one stack element for every for-loop surrounding the call site. Each
+    # for-loop pushes an iterator onto the stack.
     stack_size += loop_nesting_level(bytecode_instructions, frame.f_lasti // 2)
+
+    # Each flavor of the CALL instruction requires a different number of arguments.
+    if call_instr.opname == 'CALL_FUNCTION':
+        # +1 for the address of the function being called, +n arguments
+        stack_size += 1 + call_instr.arg
+    elif call_instr.opname == 'CALL_METHOD':
+        # +1 for the address of the method, +1 for the object, +n arguments
+        stack_size += 2 + call_instr.arg
+    elif call_instr.opname == 'CALL_FUNCTION_KW':
+        # +1 for the address of the function, +1 for the tuple containing
+        # the names of variables, +n for the length of the tuple
+        stack_size += 2 + call_instr.arg
+        assert len(<object> frame.f_localsplus[stack_size - 1]) == call_instr.arg
+    elif call_instr.opname == 'CALL_FUNCTION_EX':
+        # +1 for the function, +1 for *args, optionally +1 for **kwargs
+        stack_size += 2 + (call_instr.arg & 0x1)
+    elif call_instr.opname:
+        raise NotImplementedError("Don't know how to checkpoint around opcode"
+                f" {call_instr.opname}. Here is the function:\n"
+                + dis.Bytecode(<object> frame.f_code).dis())
 
     # Save a copy of the stack using the above guess. Convert NULL pointers to
     # a Python object sentinel value.
@@ -144,10 +137,8 @@ def save_jump() -> List[SavedStackFrame]:
         return []
 
     cdef PyFrameObject *frame = PyEval_GetFrame()
-    cdef int child_frame_arg_count = 0  # initially, the argcount of save_jump()
     while frame:
-        saved_stack.append(snapshot_frame(frame, child_frame_arg_count))
-        child_frame_arg_count = frame.f_code.co_argcount
+        saved_stack.append(snapshot_frame(frame))
         frame = frame.f_back
 
     return saved_stack

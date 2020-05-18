@@ -112,3 +112,9 @@ Jump finished
 3
 4
 5""")
+
+    def test_varargs(self):
+        self.check_output(["python3", "../examples/varargs.py"],
+                """foo in 1 2 3 4
+foo out 1 2 3 4
+foo out 1 2 3 4""")
