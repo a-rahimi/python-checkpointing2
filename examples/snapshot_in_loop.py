@@ -8,6 +8,7 @@ import function_checkpointing.save_restore as save_restore
 
 checkpoints = []
 
+
 def save_checkpoint():
     ckpt = save_restore.save_jump()
     if ckpt:

@@ -44,8 +44,8 @@ def processing(a, b):
 
 def main():
     logging.basicConfig()
-    #logging.getLogger("function_checkpointing.save_restore").setLevel(logging.DEBUG)
-    #logging.root.setLevel(logging.DEBUG)
+    # logging.getLogger("function_checkpointing.save_restore").setLevel(logging.DEBUG)
+    # logging.root.setLevel(logging.DEBUG)
 
     if len(sys.argv) > 1:
         # Restore the requested checkpoint

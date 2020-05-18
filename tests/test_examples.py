@@ -28,6 +28,26 @@ class TestExamples(unittest.TestCase):
     def setUp(self):
         self.delete_checkpoints()
 
+    def test_foo(self):
+        self.check_output(
+            ["python3", "../examples/foo.py"],
+            """saved checkpoint
+restored from checkpoint
+foo returns
+foo returns""")
+
+    def test_caller_foo(self):
+        self.check_output(
+            ["python3", "../examples/caller_foo.py"],
+            """caller->foo
+saved checkpoint
+restored from checkpoint
+foo returns
+foo->caller
+foo returns
+foo->caller""")
+
+
     def test_snapshot_in_loop(self):
         self.check_output(
             ["python3", "../examples/snapshot_in_loop.py"],
