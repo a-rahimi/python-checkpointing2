@@ -1,3 +1,6 @@
+"""Test the gut of the package, save_restore.pyx
+"""
+
 from typing import Callable, List, Sequence
 import dis
 import unittest
@@ -6,6 +9,9 @@ import function_checkpointing.save_restore as save_restore
 
 
 class TestLoopnestingLevel(unittest.TestCase):
+    """Test the loop_nesting_level function.
+    """
+
     def _test_func(self, func, expected_nesting_level):
         instructions = list(dis.Bytecode(func))
         sentinel_instruction_addr = next(

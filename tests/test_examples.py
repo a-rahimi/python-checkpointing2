@@ -1,3 +1,9 @@
+"""End to end tests.
+
+These tests check that the examples behave as expected.
+"""
+
+
 import shutil
 import subprocess
 import unittest
@@ -24,7 +30,7 @@ class TestExamples(unittest.TestCase):
 
     def test_snapshot_in_loop(self):
         self.check_output(
-            ["python3", "snapshot_in_loop.py"],
+            ["python3", "../examples/snapshot_in_loop.py"],
             """---Run processing to completion, saving checkpoints---
 step1 a= 2 lst= ['step1']
 step2 a= 4 lst= ['step1', 'step2']
@@ -61,7 +67,7 @@ EXITING MAIN
 
     def test_raise_during_restore(self):
         self.check_output(
-            ["python3", "raise_during_restore.py"], 
+            ["python3", "../examples/raise_during_restore.py"], 
             """---Run processing to completion, saving checkpoints---
 step1 a= 2 lst= ['step1']
 entering subroutine. a=2
@@ -79,7 +85,7 @@ EXITING MAIN
 EXITING MAIN""")
 
     def test_save_to_disk(self):
-        self.check_output(["python3", "save_to_disk.py"],
+        self.check_output(["python3", "../examples/save_to_disk.py"],
                 """Running to completion and dumping checkpoints
 step1 a= 2 lst= ['step1']
 entering subroutine. a=2
@@ -90,7 +96,7 @@ end
 
 You can now re-run passing checkpoint filename to restart
 """)
-        self.check_output(["python3", "save_to_disk.py", "step2"],
+        self.check_output(["python3", "../examples/save_to_disk.py", "step2"],
                 """step3 a= 8 lst= ['step1', 'step2', 'step3']
 end
 
@@ -99,7 +105,7 @@ Jump finished
 """)
 
     def test_while_loop(self):
-        self.check_output(["python3", "whileloop.py"],
+        self.check_output(["python3", "../examples/whileloop.py"],
                 """0
 1
 2
