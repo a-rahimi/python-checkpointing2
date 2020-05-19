@@ -61,6 +61,38 @@ intentional design [limitations](#Limitations).
 <img src="images/snapshot.gif" width="500">
 
 
+# Why would you want this?
+
+* Deep Learning: You probably don't need this package if you just want to
+  checkpoint an off-the-shelf deep learning training loop after every training
+epoch.  The state of these loops is already well encapsulated in the state
+of the optimizer, the model, and the epoch counter. These can be painlessly
+serialized and deserialized. But if you have a complicated training loop with
+several different expensive phases, this package might be worth your while.
+
+* Implement "Undo" in your application / let the checkpoint become the
+  document: Supporting "undo" in complicated applications means writing your
+  program so that the document captures your program's entire state. But you
+  could implement undo as just a jump to an old checkpoint. Once you save
+  checkpoints, you don't need to also create or save a document: The checkpoint
+  becomes the document and users can just move around checkpoints instead of
+  document files.
+
+* Implement a reversible debugger: These are all the rage now. Each breakpoint
+  can become a checkpoint, and you can jump back and forth between them.
+
+* You love call/cc: Maybe you miss call-with-current-continuation and you
+  want it in Python. You can implement that with `save_jump` and `jump` described
+  below.
+
+* Checkpointing as a game primitive. This probably won't make sense
+  immediately, so maybe revisit this paragraph after you understand the
+  structure of the stack during a jump in the next section. Imagine a video game
+  where a returnable longjump as described in the next section is part of the
+  gameplay.  The old state of the world is allowed to nest in the new state of
+  the world.
+
+
 # How it Works: Python versions of longjmp and setjmp under the hood
 
 The main entry points of this package are `save_checkpoint` and
@@ -92,7 +124,7 @@ if not c:
     db = connect_to_database()
 ```
 
-The semanetics of `save_jump` are similar to those of the POSIX setjmp() function.
+The semantics of `save_jump` are similar to those of the POSIX setjmp() function.
 
 ## `jump`
 
@@ -100,7 +132,7 @@ The semanetics of `save_jump` are similar to those of the POSIX setjmp() functio
 state of the frame stack to the state that `save_jump` captured.
 
 But instead of rooting the stack frames at the topmost frame, it roots it
-under its own stack frame. That means when the topmost stackframe that
+under its own stack frame. That means when the topmost stack frame that
 originated the sequence of calls that culminated in `save_jump` finishes,
 control returns to the stack frame that called `jump`.
 
@@ -157,7 +189,7 @@ captured in the bundle `c`:
 <img src="images/snapshot.png" width="600">
 
 As execution proceed down foo, we reach a call to `jump`. Jump reroots the
-callchain captured in `c` under itself and fast forwards the Python interprter
+call chain captured in `c` under itself and fast forwards the Python interpreter
 to the leaf frame:
 
 ![](images/jump.png)
@@ -174,7 +206,7 @@ after jump returns by calling `sys.exit` immediately after `jump`.
 
 ## Is this like `yield` and Python generators?
 
-There is a superficial resemblence between `save_jump` and the Python `yield`
+There is a superficial resemblance between `save_jump` and the Python `yield`
 statement: both stash the current stack frame. But then `yield` forces the
 interpreter to exit the stack frame and returns control to the caller's stack
 frame, essentially acting as `return`. On the other hand, `save_jump`  saves
@@ -182,7 +214,7 @@ the entire chain of stack frames, and allows execution to remain in the current
 frame. `save_jump` appears as a normal function call and not at all like
 `return`.
 
-Similarly, there is a superficial resemblence between `jump` and calling a
+Similarly, there is a superficial resemblance between `jump` and calling a
 generator's `send` method. Calling `send` resumes the generator frame's
 execution at its last `yield`.  But `jump` does more than that: it resumes
 execution of the entire call chain leading up to `save_jump`, not just the
@@ -225,7 +257,7 @@ example.
 # Technical Details
 
 Saving the Python interpreter state is tricky. The CPython interpreter has
-effectively two stacks: the interpeter stack, which the bytecode instructions
+effectively two stacks: the interpreter stack, which the bytecode instructions
 operate on, and the C stack, which the bytecode interpreter uses to keep track
 of its own state. This package manipulates the state of both stacks.
 
@@ -244,7 +276,7 @@ and the loop iterator. We count the level of nesting of exceptions and loops to
 count these objects too.
 
 To manipulate the C stack, this package guides the CPython bytcode
-interpreterer, `_PyEval_EvalFrameDefault`, to call itself recursively. These
+interpreter, `_PyEval_EvalFrameDefault`, to call itself recursively. These
 nested calls cause the C stack to attain the state it had when `save_jump` was
 called.
 
